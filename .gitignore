@@ -1,0 +1,4 @@
+node_modules/
+test/.core.generated.mjs
+.DS_Store
+Thumbs.db
