@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>打鍵リーダー — かな入力練習</title>
+<style>
+:root{
+  --paper:#E7E9E0;
+  --panel:#F7F7F1;
+  --ink:#171A15;
+  --rule:#6E9478;
+  --rule-soft:#C4D4C8;
+  --shu:#B4382E;
+  --mute:#99A093;
+  --gap:2;
+  --fs:1.35rem;
+  --tapeH:4.6rem;
+  --mincho:"Hiragino Mincho ProN","HiraMinProN-W3","Yu Mincho",YuMincho,"Noto Serif JP","Noto Serif CJK JP","Songti SC",serif;
+  --util:ui-monospace,SFMono-Regular,Menlo,Consolas,"Courier New",monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--mincho);
+  overflow:hidden;
+  -webkit-text-size-adjust:100%;
+}
+
+/* ── ヘッダ ───────────────────────────── */
+.bar{
+  position:fixed;top:0;left:0;right:0;z-index:5;
+  display:flex;align-items:baseline;gap:1.5rem;flex-wrap:wrap;
+  padding:.85rem 1.1rem;
+  border-bottom:1px solid var(--rule-soft);
+  background:linear-gradient(var(--paper) 70%,rgba(231,233,224,0));
+}
+.work{display:flex;align-items:baseline;gap:.6rem;min-width:0}
+.work .t{font-size:1rem;letter-spacing:.14em}
+.work .a{font-size:.72rem;color:var(--mute);letter-spacing:.1em}
+.stats{display:flex;gap:1.1rem;margin-left:auto;flex-wrap:wrap}
+.stat{display:flex;align-items:baseline;gap:.3rem}
+.stat b{
+  font-family:var(--util);font-size:.95rem;font-weight:500;
+  font-variant-numeric:tabular-nums;letter-spacing:-.02em;min-width:2.6ch;text-align:right;
+}
+.stat i{font-style:normal;font-size:.6rem;color:var(--mute);letter-spacing:.08em}
+.ctl{display:flex;align-items:center;gap:.3rem;margin-left:.4rem}
+.ctl span{font-size:.6rem;color:var(--mute);letter-spacing:.08em;margin-right:.15rem}
+button{
+  font-family:var(--util);font-size:.68rem;
+  border:1px solid var(--rule-soft);background:transparent;color:var(--mute);
+  border-radius:2px;padding:.18rem .42rem;cursor:pointer;line-height:1;
+}
+button:hover{border-color:var(--rule);color:var(--ink)}
+button[aria-pressed="true"]{background:var(--rule);border-color:var(--rule);color:var(--panel)}
+button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
+
+/* ── 入力欄 ───────────────────────────── */
+.stage{
+  position:fixed;left:0;right:0;
+  bottom:calc(var(--tapeH) + var(--gap) * var(--fs) * 1.9);
+  padding:0 1.1rem;
+  transition:bottom .2s ease;
+}
+.scroll{
+  width:min(80vw, calc(30 * var(--fs)));
+  margin-inline:auto;
+  max-height:52vh;overflow-y:auto;display:flex;flex-direction:column;
+  scrollbar-width:thin;scrollbar-color:var(--rule-soft) transparent;
+  scrollbar-gutter:stable;
+}
+.editor{
+  margin-top:auto;
+  font-size:var(--fs);line-height:1.9;
+  letter-spacing:normal;   /* テープと字送りを一致させるため必須 */
+  outline:none;
+  min-height:calc(var(--fs) * 1.9);
+  overflow-wrap:anywhere;
+  caret-color:var(--shu);
+}
+.editor .ok{color:var(--ink)}
+.editor .ng{color:var(--shu);background:rgba(180,56,46,.09);border-radius:1px}
+.editor .auto{color:var(--mute)}
+.anchor{display:inline-block;width:0;height:1em;vertical-align:baseline}
+.compose{display:inline;min-height:1em}
+.hint{
+  width:min(80vw, calc(30 * var(--fs)));
+  margin-inline:auto;
+  color:var(--mute);font-size:.8rem;letter-spacing:.1em;
+  transition:opacity .4s ease;
+}
+.hint.gone{opacity:0}
+
+/* ── お手本テープ ─────────────────────── */
+.tapewrap{
+  position:fixed;left:0;right:0;bottom:0;height:var(--tapeH);z-index:4;
+  overflow:hidden;
+  background:var(--panel);
+  border-top:1px solid var(--rule);
+  box-shadow:0 -1px 0 var(--panel),0 -6px 18px rgba(23,26,21,.06);
+}
+.tape{
+  position:absolute;left:0;bottom:.95rem;
+  white-space:nowrap;
+  font-size:var(--fs);
+  line-height:1;
+  letter-spacing:normal;
+  transition:transform .18s cubic-bezier(.22,.7,.3,1);
+  will-change:transform;
+}
+.sp{display:inline-block;height:1px;vertical-align:baseline}
+.cell{
+  display:inline-block;
+  box-shadow:inset -1px 0 0 var(--rule-soft);
+  color:var(--ink);
+  transition:opacity .18s ease,color .18s ease;
+}
+.cell.past{opacity:.28}
+.cell.now{color:var(--shu)}
+.cell.brk{color:var(--rule);opacity:.5}
+.cell.auto{color:var(--rule);opacity:.55}
+.cell.end{color:var(--rule);letter-spacing:.2em;padding-left:.4em}
+.rbase{position:relative;display:inline-block;vertical-align:baseline}
+.rt{
+  position:absolute;left:0;right:0;bottom:100%;
+  font-size:.38em;line-height:1;text-align:center;white-space:nowrap;
+  color:var(--rule);letter-spacing:.02em;padding-bottom:.25em;
+}
+.tapecaret{
+  position:absolute;bottom:0;width:1px;height:calc(var(--tapeH) - 1.35rem);
+  background:var(--shu);
+  transition:left .18s cubic-bezier(.22,.7,.3,1);
+}
+.tapecaret::after{
+  content:"";position:absolute;left:-3px;bottom:-1px;
+  border:3.5px solid transparent;border-bottom-color:var(--shu);
+}
+/* ── 作品選択 ─────────────────────────── */
+.pk{
+  position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;
+  background:rgba(23,26,21,.32);padding:1rem;
+}
+.pk[hidden]{display:none}   /* 作者スタイルは [hidden] より優先されるため明示が必要 */
+.pkCard{
+  background:var(--panel);border:1px solid var(--rule);
+  width:min(94vw,34rem);max-height:88vh;overflow-y:auto;padding:1.1rem;
+  display:flex;flex-direction:column;gap:.55rem;
+}
+.pkHead{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:.2rem}
+.pkHead h2{font-size:1rem;font-weight:400;letter-spacing:.16em}
+.pkList{display:grid;grid-template-columns:repeat(auto-fill,minmax(9.5rem,1fr));gap:.3rem;margin-bottom:.4rem}
+.pkItem{
+  display:flex;flex-direction:column;align-items:flex-start;gap:.12rem;
+  font-family:var(--mincho);font-size:.85rem;text-align:left;
+  padding:.42rem .55rem;color:var(--ink);border-color:var(--rule-soft);
+}
+.pkItem em{font-style:normal;font-size:.62rem;color:var(--mute);letter-spacing:.06em}
+.pkItem:hover{background:var(--paper)}
+.pkLbl{font-size:.63rem;color:var(--mute);letter-spacing:.1em;margin-top:.35rem}
+.pkRow{display:flex;gap:.35rem}
+.pk input,.pk textarea{
+  flex:1;min-width:0;font-family:var(--util);font-size:.75rem;
+  border:1px solid var(--rule-soft);background:var(--paper);color:var(--ink);
+  padding:.35rem .45rem;border-radius:2px;
+}
+.pk textarea{min-height:5.5rem;resize:vertical;font-family:var(--mincho);font-size:.85rem}
+.pk input:focus,.pk textarea:focus{outline:1px solid var(--rule);border-color:var(--rule)}
+.pkStatus{font-size:.68rem;color:var(--shu);line-height:1.6;min-height:1.2em}
+.pk.busy{pointer-events:none;opacity:.7}
+
+.probe{position:absolute;visibility:hidden;white-space:nowrap;font-size:var(--fs);font-family:var(--mincho)}
+#logbox{
+  position:fixed;right:0;top:3.2rem;width:16rem;height:min(62vh,26rem);z-index:9;
+  font-family:var(--util);font-size:.6rem;line-height:1.5;
+  background:var(--panel);border:1px solid var(--rule-soft);padding:.4rem;
+  color:var(--ink);resize:none;overflow:auto;border-radius:0;
+  user-select:text;-webkit-user-select:text;
+}
+#logbox:focus{outline:2px solid var(--rule);outline-offset:-2px}
+
+@media (max-width:600px){
+  :root{--fs:1.1rem;--tapeH:4rem}
+  .bar{gap:.7rem;padding:.6rem .7rem}
+  .stats{gap:.7rem;width:100%;margin-left:0}
+  .stage{padding:0 .7rem}
+}
+@media (prefers-reduced-motion:reduce){
+  .tape,.tapecaret,.stage{transition:none}
+}
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="work"><span class="t" id="wTitle">—</span><span class="a" id="wAuthor"></span></div>
+  <div class="stats">
+    <div class="stat"><b id="sCpm">—</b><i>字/分</i></div>
+    <div class="stat"><b id="sKpm">—</b><i>打/分</i></div>
+    <div class="stat"><b id="sEff">—</b><i>打/字</i></div>
+    <div class="stat"><b id="sSeg">—</b><i>字/変換</i></div>
+    <div class="stat"><b id="sErr">—</b><i>％誤</i></div>
+    <div class="stat"><b id="sPos">—</b><i>字</i></div>
+  </div>
+  <div class="ctl">
+    <button id="works">作品</button>
+    <span style="margin-left:.4rem">ギャップ</span>
+    <button data-gap="0">0</button><button data-gap="1">1</button>
+    <button data-gap="2" aria-pressed="true">2</button><button data-gap="3">3</button>
+    <button id="reset" style="margin-left:.5rem">最初から</button>
+    <button id="logbtn">ログ</button>
+    <button id="logcopy">コピー</button>
+    <button id="logclear">ログ消去</button>
+  </div>
+</header>
+
+<div class="stage">
+  <div class="scroll" id="scroll">
+    <div class="editor" id="editor" contenteditable="true" spellcheck="false"
+         autocapitalize="off" autocorrect="off" translate="no"><span class="frozen" id="frozen" contenteditable="false"></span><span class="live" id="live" contenteditable="false"></span><span class="compose" id="compose"></span></div>
+  </div>
+  <p class="hint" id="hint">かな入力に切り替えて、下のテープの文字を打ってください。変換は自由な長さで区切れます。</p>
+</div>
+
+<div class="tapewrap" id="tapewrap">
+  <div class="tape" id="tape"></div>
+  <div class="tapecaret" id="tapecaret"></div>
+</div>
+
+<div class="pk" id="picker" hidden>
+  <div class="pkCard">
+    <div class="pkHead"><h2>作品を選ぶ</h2><button id="pkClose">閉じる</button></div>
+    <div class="pkList" id="pkList"></div>
+    <label class="pkLbl">青空文庫のカードURL</label>
+    <div class="pkRow">
+      <input id="pkUrl" type="url" placeholder="https://www.aozora.gr.jp/cards/000148/card789.html">
+      <button id="pkUrlGo">読み込む</button>
+    </div>
+    <label class="pkLbl">または本文を直接貼り付け（青空文庫記法のまま可）</label>
+    <input id="pkTitle" type="text" placeholder="作品名（任意）">
+    <textarea id="pkPaste" placeholder="ここに本文を貼り付け"></textarea>
+    <div class="pkRow"><button id="pkPasteGo">この文章で始める</button></div>
+    <p class="pkStatus" id="pkStatus"></p>
+  </div>
+</div>
+<span class="probe" id="probe"></span>
+<textarea id="logbox" readonly hidden spellcheck="false" wrap="off"></textarea>
+
+<script>
+"use strict";
+
+//#region testable
+/* ═══════════════════════════════════════════════════
+   0. 原文（青空文庫記法）
+   ═══════════════════════════════════════════════════ */
+const SAMPLE = {
+  title:"吾輩は猫である", author:"夏目漱石",
+  text:
+`吾輩は猫である。名前はまだ無い。
+　どこで生れたかとんと見当《けんとう》がつかぬ。何でも薄暗いじめじめした所でニャーニャー泣いていた事だけは記憶している。吾輩はここで始めて人間というものを見た。しかもあとで聞くとそれは書生という人間中で一番｜獰悪《どうあく》な種族であったそうだ。この書生というのは時々我々を捕えて煮て食うという話である。
+　しかしその当時は何という考もなかったから別段恐しいとも思わなかった。ただ彼の掌《てのひら》に載せられてスーと持ち上げられた時何だかフワフワした感じがあったばかりである。掌の上で少し落ちついて書生の顔を見たのがいわゆる人間というものの見始《みはじめ》であろう。`
+};
+
+/* ═══════════════════════════════════════════════════
+   1. 記法パーサ  →  tokens / target / pre / tokenOfTarget
+   ═══════════════════════════════════════════════════ */
+const KANJI = /[\u3005\u3006\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF]/;
+const KATA  = /[\u30A1-\u30FA\u30FC]/;
+
+function parseAozora(src){
+  src = src.replace(/^-{10,}[\s\S]*?-{10,}\n/,"")      // 冒頭の凡例ブロック
+           .replace(/\n底本：[\s\S]*$/,"")              // 底本以降
+           .replace(/※［＃[^］]*?U\+([0-9A-Fa-f]{4,5})[^］]*］/g,(m,h)=>String.fromCodePoint(parseInt(h,16)))
+           .replace(/［＃[^］]*］/g,"")                  // 注記
+           .replace(/\r\n?/g,"\n").trim();
+
+  const tokens=[]; let forced=-1;
+  for(let i=0;i<src.length;i++){
+    const c=src[i];
+    if(c==="｜"){ forced=tokens.length; continue; }
+    if(c==="《"){
+      const e=src.indexOf("》",i); if(e<0) continue;
+      const ruby=src.slice(i+1,e); i=e;
+      let s = forced>=0 ? forced : rubyBase(tokens); forced=-1;
+      if(s>=0 && s<tokens.length){
+        tokens[s].ruby=ruby; tokens[s].rubySpan=tokens.length-s;
+        for(let k=s+1;k<tokens.length;k++) tokens[k].rubyCont=true;
+      }
+      continue;
+    }
+    tokens.push({ch:c, typable:c!=="\n" && !(c==="　" && (tokens.length===0||tokens[tokens.length-1].ch==="\n"))});
+  }
+  tokens.push({ch:"了", typable:false, end:true});
+
+  // 派生構造
+  let target=""; const tokenOfTarget=[]; const pre=[]; let buf="";
+  for(let i=0;i<tokens.length;i++){
+    const tk=tokens[i];
+    if(tk.typable){ pre[target.length]=buf; buf=""; tokenOfTarget[target.length]=i; target+=tk.ch; }
+    else if(!tk.end){ buf+=tk.ch; }
+  }
+  pre[target.length]=buf; tokenOfTarget[target.length]=tokens.length-1;
+  return {tokens,target,pre,tokenOfTarget};
+
+  function rubyBase(tk){
+    let j=tk.length-1; if(j<0) return -1;
+    const test = KANJI.test(tk[j].ch) ? KANJI : (KATA.test(tk[j].ch) ? KATA : null);
+    if(!test) return j;
+    while(j>0 && test.test(tk[j-1].ch)) j--;
+    return j;
+  }
+}
+
+let WORK = SAMPLE;
+let tokens=[], target="", pre=[], tokenOfTarget=[];
+function setDoc(w){                 // 純粋：文書状態だけを差し替える
+  WORK = w;
+  const d = parseAozora(w.text);
+  tokens=d.tokens; target=d.target; pre=d.pre; tokenOfTarget=d.tokenOfTarget;
+}
+
+/* ═══════════════════════════════════════════════════
+   2. 判定エンジン（帯状DP + アンカー）
+   ═══════════════════════════════════════════════════ */
+const WIN = 96;      // アンカーからの照合窓
+const ANCHOR_RUN = 8;  // これだけ連続一致したら確定
+const FORCE = 240;     // 安全弁
+
+let typed, rows, Mloc, anchorT, anchorK, cursor, ngFrozen;
+
+function engineReset(){
+  typed=[]; anchorT=0; anchorK=0; cursor=0; ngFrozen=0;
+  resetDP();
+}
+function resetDP(){
+  Mloc = target.slice(anchorT, anchorT+WIN);
+  const r0=new Int32Array(Mloc.length+1);
+  for(let j=0;j<=Mloc.length;j++) r0[j]=j;
+  rows=[r0];
+}
+function step(ch){
+  typed.push({ch, cls:"ng", c:-1});
+  const L=Mloc.length, prev=rows[rows.length-1], cur=new Int32Array(L+1);
+  cur[0]=prev[0]+1;
+  for(let j=1;j<=L;j++){
+    const sub=prev[j-1]+(ch===Mloc[j-1]?0:1);
+    cur[j]=Math.min(prev[j]+1, cur[j-1]+1, sub);
+  }
+  rows.push(cur);
+}
+function reclassify(){
+  const last=rows[rows.length-1];
+  let best=0,bv=Infinity;
+  for(let j=0;j<last.length;j++) if(last[j]<=bv){bv=last[j];best=j;}   // 同点は最右
+  cursor=anchorT+best;
+
+  let i=rows.length-1, j=best, guard=0;
+  while(i>0 && guard++<100000){
+    const it=typed[anchorK+i-1], eq = j>0 && it.ch===Mloc[j-1];
+    if(j>0 && rows[i][j]===rows[i-1][j-1]+(eq?0:1)){
+      it.cls = eq?"ok":"ng"; it.c = anchorT+j-1; i--; j--;
+    }else if(rows[i][j]===rows[i-1][j]+1){
+      it.cls="ng"; it.c=-1; i--;                                        // 余計に打った
+    }else if(j>0 && rows[i][j]===rows[i][j-1]+1){
+      j--;                                                              // 打ち漏らし
+    }else{ break; }
+  }
+}
+function maybeAnchor(){
+  const n=typed.length-anchorK;
+  if(n>=ANCHOR_RUN && cursor-anchorT>=ANCHOR_RUN){
+    let ok=true;
+    for(let k=typed.length-ANCHOR_RUN;k<typed.length;k++) if(typed[k].cls!=="ok"){ok=false;break;}
+    if(ok) return setAnchor();
+  }
+  if(n>FORCE) setAnchor();
+}
+function setAnchor(){
+  for(let k=anchorK;k<typed.length;k++) if(typed[k].cls==="ng") ngFrozen++;
+  anchorK=typed.length; anchorT=cursor; resetDP();
+}
+
+/* ── 描画用の純粋関数（テスト対象） ── */
+function esc(s){ return s.replace(/[&<>]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+function autoHTML(s){
+  let o=""; for(const c of s) o += c==="\n" ? "<br>" : `<span class="auto">${esc(c)}</span>`;
+  return o;
+}
+function renderRange(a,b,em,tail){
+  let out="", e=em;
+  for(let k=a;k<b;k++){
+    const it=typed[k];
+    if(it.c>=e){ for(let u=e;u<=it.c;u++) if(pre[u]) out+=autoHTML(pre[u]); e=it.c+1; }
+    out += `<span class="${it.cls}">${esc(it.ch)}</span>`;
+  }
+  if(tail!=null){ for(let u=e;u<=tail;u++) if(pre[u]) out+=autoHTML(pre[u]); }
+  return {html:out, em:e};
+}
+//#endregion testable
+
+/* ═══════════════════════════════════════════════════
+   3. 入力欄の描画
+   ═══════════════════════════════════════════════════ */
+const editor=$("editor"), frozenEl=$("frozen"), liveEl=$("live"), composeEl=$("compose");
+const scrollEl=$("scroll"), hintEl=$("hint");
+let frozenUpto=0, emFrozen=0, lastLiveHTML=null;
+function $(id){ return document.getElementById(id); }
+function renderEditor(){
+  if(frozenUpto<anchorK){
+    const r=renderRange(frozenUpto,anchorK,emFrozen,null);
+    frozenEl.insertAdjacentHTML("beforeend", r.html);
+    emFrozen=r.em; frozenUpto=anchorK;
+  }
+  // 測定用アンカーは contenteditable=false の live 内に置く（キャレットに一切干渉しない）
+  const html = renderRange(anchorK, typed.length, emFrozen, Math.min(cursor,target.length)).html
+             + '<span class="anchor"></span>';
+  if(html!==lastLiveHTML){ liveEl.innerHTML=html; lastLiveHTML=html; }
+}
+// キャレットX座標。アンカーが <br> 直後なら行頭に来るので、そのまま正しい
+function caretX(){
+  const a=liveEl.lastElementChild;
+  const box=(a?a:editor).getBoundingClientRect();
+  return (a?box.left:box.left+parseFloat(getComputedStyle(editor).paddingLeft||0));
+}
+// キャレットの置き場所を必ず存在させるためのゼロ幅スペース。
+// composeEl が完全に空になるとブラウザが有効なキャレット位置を失い、IME が外れる。
+const ZWSP="\u200B";
+function strip(s){ return (s||"").split(ZWSP).join(""); }
+function isCaretInCompose(){
+  const s=getSelection();
+  if(!s || !s.rangeCount) return false;
+  const n=s.getRangeAt(0).startContainer;
+  return n===composeEl || composeEl.contains(n);
+}
+function placeCaret(){
+  if(composeEl.textContent==="") composeEl.textContent=ZWSP;
+  const node=composeEl.lastChild;
+  const s=getSelection();
+  if(node && node.nodeType===3 && s.focusNode===node && s.focusOffset===node.nodeValue.length) return;
+  const r=document.createRange();
+  if(node && node.nodeType===3) r.setStart(node, node.nodeValue.length);
+  else r.setStart(composeEl, composeEl.childNodes.length);
+  r.collapse(true);
+  s.removeAllRanges(); s.addRange(r);
+}
+function getSelectionNode(){
+  const s=getSelection();
+  return s && s.rangeCount ? s.getRangeAt(0).startContainer : null;
+}
+function clearPending(){ composeEl.textContent=ZWSP; }
+function pendingText(){ return strip(composeEl.textContent); }
+function syncScroll(){ scrollEl.scrollTop=scrollEl.scrollHeight; }
+
+/* ═══════════════════════════════════════════════════
+   4. お手本テープ（窓の仮想化 + 実測アライン）
+   ═══════════════════════════════════════════════════ */
+const tape=$("tape"), tapewrap=$("tapewrap"), tapecaret=$("tapecaret"), probe=$("probe");
+const HALF=400, EDGE=150, LOOKAHEAD=7, EDGE_PAD=16;
+let tokenW=new Float64Array(0), cum=new Float64Array(1);
+let cellEls=new Map(), winStart=-1, winEnd=-1, prevNow=-1;
+let fullW=0, halfW=0;
+
+function measureProbes(){
+  probe.textContent="国"; fullW=probe.getBoundingClientRect().width;
+  probe.textContent="M";  halfW=probe.getBoundingClientRect().width;
+  probe.textContent="";
+}
+function estW(i){
+  const c=tokens[i].ch;
+  if(tokens[i].end) return fullW*1.6;
+  return /[\x20-\x7E]/.test(c) ? halfW : fullW;
+}
+function rebuildCum(){
+  let s=0;
+  for(let i=0;i<tokens.length;i++){ cum[i]=s; s += tokenW[i] || estW(i); }
+  cum[tokens.length]=s;
+}
+function makeCell(tk,i){
+  const el=document.createElement("span");
+  el.className="cell" + (tk.ch==="\n"?" brk":"") + (tk.end?" end":"")
+              + (!tk.typable && !tk.end && tk.ch!=="\n" ? " auto":"");
+  el.textContent = tk.ch==="\n" ? "¶" : tk.ch;
+  return el;
+}
+function buildWindow(center){
+  rebuildCum();
+  winStart=Math.max(0,center-HALF);
+  const stop=Math.min(tokens.length,center+HALF);
+  const frag=document.createDocumentFragment();
+  const spL=document.createElement("i"); spL.className="sp"; spL.style.width=cum[winStart]+"px";
+  frag.appendChild(spL);
+  cellEls=new Map();
+  let i=winStart;
+  while(i<stop){
+    const tk=tokens[i];
+    if(tk.ruby && tk.rubySpan){
+      const base=document.createElement("span"); base.className="rbase";
+      const rt=document.createElement("span"); rt.className="rt"; rt.textContent=tk.ruby;
+      base.appendChild(rt);
+      for(let k=0;k<tk.rubySpan && i+k<tokens.length;k++){
+        const c=makeCell(tokens[i+k],i+k); base.appendChild(c); cellEls.set(i+k,c);
+      }
+      frag.appendChild(base); i+=tk.rubySpan;
+    }else{
+      const c=makeCell(tk,i); frag.appendChild(c); cellEls.set(i,c); i++;
+    }
+  }
+  winEnd=i;
+  const spR=document.createElement("i"); spR.className="sp";
+  spR.style.width=Math.max(0,cum[tokens.length]-cum[winEnd])+"px";
+  frag.appendChild(spR);
+  tape.replaceChildren(frag);
+  for(const [idx,el] of cellEls) tokenW[idx]=el.getBoundingClientRect().width;
+  prevNow=-1;
+}
+function leftInTape(el){
+  let x=0;
+  while(el && el!==tape){ x+=el.offsetLeft; el=el.offsetParent; }
+  return x;
+}
+function updateTape(){
+  if(composing) return;
+  const ti=tokenOfTarget[Math.min(cursor,target.length)];
+  if(winStart<0 || (ti-winStart<EDGE && winStart>0) || (winEnd-ti<EDGE && winEnd<tokens.length)) buildWindow(ti);
+  const el=cellEls.get(ti); if(!el) return;
+
+  if(prevNow!==ti){
+    for(const [idx,c] of cellEls){
+      c.classList.toggle("past", idx<ti);
+      c.classList.toggle("now", idx===ti);
+    }
+    prevNow=ti;
+  }
+  const vp=tapewrap.getBoundingClientRect();
+  const cx=caretX() - vp.left;
+  const base=leftInTape(el);
+  let tx=cx - base;                       // 原則：お手本の現在位置をキャレットに揃える
+
+  // 先読みが LOOKAHEAD 文字ぶん見えないときは、その分だけテープを左へ押し戻す
+  const aheadEl=cellEls.get(tokenOfTarget[Math.min(cursor+LOOKAHEAD, target.length)]);
+  if(aheadEl){
+    const over = (cx + (leftInTape(aheadEl)-base)) - (vp.width - EDGE_PAD);
+    if(over>0) tx -= over;
+  }
+  tape.style.transform=`translateX(${tx}px)`;
+  tapecaret.style.left=(tx + base)+"px";   // マーカーは常に現在位置のセルに付く
+}
+
+/* ═══════════════════════════════════════════════════
+   5. 統計
+   ═══════════════════════════════════════════════════ */
+// IME経由のキーは Android で "Unidentified"、Windows で "Process" になる。
+// これらは実打鍵なので必ず数える。除外するのは純粋な修飾キーのみ。
+const MOD=new Set(["Control","Alt","Meta","CapsLock","AltGraph","ContextMenu"]);
+let keys=0, elapsed=0, lastKey=0, commits=0;
+const IDLE=10000;
+function countKey(e){
+  if(e.repeat) return;          // 押しっぱなしを数えない
+  if(MOD.has(e.key)) return;
+  keys++;
+  const now=performance.now();
+  if(lastKey && now-lastKey<IDLE) elapsed += now-lastKey;
+  lastKey=now;
+}
+function updateStats(){
+  const min=elapsed/60000;
+  const ng=ngFrozen + typed.slice(anchorK).filter(t=>t.cls==="ng").length;
+  $("sCpm").textContent = min>0.005 ? Math.round(cursor/min) : "—";
+  $("sKpm").textContent = min>0.005 ? Math.round(keys/min) : "—";
+  $("sEff").textContent = cursor>0 ? (keys/cursor).toFixed(2) : "—";
+  $("sSeg").textContent = commits>0 ? (typed.length/commits).toFixed(1) : "—";
+  $("sErr").textContent = typed.length>0 ? (ng/typed.length*100).toFixed(1) : "—";
+  $("sPos").textContent = `${cursor}/${target.length}`;
+}
+
+/* ═══════════════════════════════════════════════════
+   6. IME 捕捉
+   ═══════════════════════════════════════════════════ */
+let composing=false, guardUntil=0;
+const LOG=[]; let logOn=false, logT=0;
+function log(k,d){
+  const now=performance.now();
+  const dt = logT ? Math.min(9999,Math.round(now-logT)) : 0;
+  logT=now;
+  LOG.push(String(dt).padStart(4)+"ms "+k+(d!==undefined&&d!==""?" "+JSON.stringify(d):""));
+  if(LOG.length>300) LOG.shift();
+  if(logOn) paintLog();
+}
+function paintLog(){
+  const b=$("logbox");
+  if(document.activeElement===b) return;      // 選択中は書き換えない
+  b.value=LOG.join("\n")||"(まだイベントがありません)";
+  b.scrollTop=b.scrollHeight;
+}
+
+editor.addEventListener("beforeinput", e=>{
+  const t=e.inputType;
+  log("before",t);
+  // 変換に関わる inputType は絶対に止めない（deleteCompositionText を止めると IME が壊れる）
+  if(t.indexOf("Composition")>=0) return;
+  if(t.startsWith("delete") || t==="insertParagraph" || t==="insertLineBreak" ||
+     t==="insertFromPaste" || t==="insertFromPasteAsQuotation" || t==="insertFromDrop" ||
+     t==="insertFromYank" || t==="historyUndo" || t==="historyRedo" || t.startsWith("format")){
+    e.preventDefault();
+  }
+});
+editor.addEventListener("compositionstart", ()=>{ composing=true; log("compStart"); });
+editor.addEventListener("compositionupdate", e=>{
+  log("compUpd", e.data);
+  syncScroll();   // 長い未確定文字列で行が増えても最下段を保つ（DOMは触らない）
+});
+editor.addEventListener("compositionend", e=>{
+  composing=false; guardUntil=performance.now()+80;
+  const data=strip(e.data);
+  log("compEnd", e.data);
+  // setTimeout は「次のタスク」なので、次のキー入力に追い越される。
+  // マイクロタスクなら現在のタスク直後＝次のキーイベントより確実に前に走る。
+  queueMicrotask(()=>{
+    if(composing){ log("race","次の変換が先に開始した"); }   // 保険：未確定文字列を壊さない
+    else clearPending();
+    commit(data);
+  });
+});
+editor.addEventListener("input", e=>{
+  log("input", e.inputType+(e.isComposing?"/composing":""));
+  if(e.isComposing||composing) return;
+  if(performance.now()<guardUntil){ clearPending(); return; }
+  const t=pendingText();
+  if(t){ clearPending(); commit(t); }
+});
+editor.addEventListener("keydown", e=>{
+  log("key", e.key); countKey(e);
+  // 変換キャンセル等でキャレットを見失っていたら、キーが処理される前に復帰させる
+  if(!composing && !isCaretInCompose()){ log("heal","keydown"); placeCaret(); }
+});
+editor.addEventListener("paste", e=>e.preventDefault());
+editor.addEventListener("drop",  e=>e.preventDefault());
+
+document.addEventListener("selectionchange", ()=>{
+  if(composing || document.activeElement!==editor) return;
+  const n=getSelectionNode();
+  if(!n || !editor.contains(n)) return;
+  if(composeEl.contains(n) || n===composeEl) return;   // 正しい位置
+  placeCaret();
+});
+document.addEventListener("mousedown", e=>{
+  if(e.target.closest("button, #logbox, .pk")) return;
+  e.preventDefault(); editor.focus(); placeCaret();
+});
+
+/* ═══════════════════════════════════════════════════
+   7. 確定処理
+   ═══════════════════════════════════════════════════ */
+function commit(s){
+  const before=cursor;
+  if(s){
+    hintEl.classList.add("gone");
+    // 1文字ずつ判定する。まとめて判定すると、1回の確定が照合窓(WIN)を
+    // 超えたときにアンカーが進まず cursor が頭打ちになる。
+    for(const ch of s){ if(ch==="\n"||ch==="\r") continue; step(ch); reclassify(); maybeAnchor(); }
+    commits++;
+    log("COMMIT", s+" → cursor "+before+"→"+cursor);
+  }
+  renderEditor();
+  if(!composing) placeCaret();     // 変換中にキャレットを動かすと未確定文字列が壊れる
+  requestAnimationFrame(()=>{ syncScroll(); updateTape(); });
+  updateStats();
+}
+
+/* ═══════════════════════════════════════════════════
+   8. UI
+   ═══════════════════════════════════════════════════ */
+document.querySelectorAll("[data-gap]").forEach(b=>{
+  b.addEventListener("click",()=>{
+    document.querySelectorAll("[data-gap]").forEach(x=>x.setAttribute("aria-pressed","false"));
+    b.setAttribute("aria-pressed","true");
+    document.documentElement.style.setProperty("--gap", b.dataset.gap);
+    requestAnimationFrame(()=>{ syncScroll(); updateTape(); });
+  });
+});
+$("reset").addEventListener("click", start);
+$("logbtn").addEventListener("click", ()=>{
+  logOn=!logOn; $("logbox").hidden=!logOn;
+  $("logbtn").setAttribute("aria-pressed", String(logOn));
+  if(logOn){ paintLog(); return; }          // 開いた直後は入力欄に戻さない（選択できるように）
+  editor.focus(); placeCaret();
+});
+$("logclear").addEventListener("click", ()=>{ LOG.length=0; logT=0; $("logbox").blur(); paintLog(); });
+$("logcopy").addEventListener("click", async ()=>{
+  const btn=$("logcopy"), box=$("logbox"), txt=LOG.join("\n");
+  const done=m=>{ btn.textContent=m; setTimeout(()=>btn.textContent="コピー",1400); };
+  try{
+    await navigator.clipboard.writeText(txt);
+    done("コピーした");
+  }catch(err){
+    // iframe内でクリップボードAPIが使えない場合は選択して execCommand
+    const wasHidden=box.hidden;
+    box.hidden=false; box.value=txt;
+    box.focus(); box.setSelectionRange(0, txt.length);
+    let ok=false;
+    try{ ok=document.execCommand("copy"); }catch(e2){}
+    if(!ok){ logOn=true; box.hidden=false; $("logbtn").setAttribute("aria-pressed","true"); }
+    else box.hidden=wasHidden;
+    done(ok?"コピーした":"全選択した");
+  }
+});
+addEventListener("resize", ()=>{ syncScroll(); updateTape(); });
+setInterval(()=>{
+  updateStats();
+  // 何らかの理由でキャレットを失っていたら自動復帰させる（最終防衛線）
+  if(!composing && document.activeElement===editor && !isCaretInCompose()){
+    log("heal","interval"); placeCaret();
+  }
+}, 500);
+
+function applyWork(w){
+  setDoc(w);
+  tokenW=new Float64Array(tokens.length);
+  cum=new Float64Array(tokens.length+1);
+  start();
+}
+
+function start(){
+  engineReset();
+  keys=0; elapsed=0; lastKey=0; commits=0;
+  frozenUpto=0; emFrozen=0; lastLiveHTML=null;
+  frozenEl.innerHTML=""; liveEl.innerHTML=""; composeEl.textContent=ZWSP;
+  winStart=-1; winEnd=-1; tokenW=new Float64Array(tokens.length);
+  hintEl.classList.remove("gone");
+  $("wTitle").textContent=WORK.title; $("wAuthor").textContent=WORK.author;
+  measureProbes();
+  renderEditor(); editor.focus(); placeCaret();
+  requestAnimationFrame(()=>{ syncScroll(); updateTape(); updateStats(); });
+}
+
+/* ═══════════════════════════════════════════════════
+   9. 青空文庫ローダー
+   ═══════════════════════════════════════════════════ */
+const GH="https://raw.githubusercontent.com/aozorabunko/aozorabunko/master/";
+// カードURLは「人物ID / 作品ID」だけ分かれば組み立てられるが、
+// 本文ファイル名（例 789_14547.html）は導出できないのでカードページを解析する。
+const PRESETS=[
+  ["吾輩は猫である","夏目漱石","000148","789"],
+  ["こころ","夏目漱石","000148","773"],
+  ["羅生門","芥川龍之介","000879","127"],
+  ["蜘蛛の糸","芥川龍之介","000879","92"],
+  ["走れメロス","太宰治","000035","1567"],
+  ["人間失格","太宰治","000035","301"],
+  ["山月記","中島敦","000119","624"],
+  ["銀河鉄道の夜","宮沢賢治","000081","456"],
+  ["檸檬","梶井基次郎","000074","424"],
+];
+
+async function fetchSJIS(url){
+  const res=await fetch(url,{mode:"cors"});
+  if(!res.ok) throw new Error(res.status+" "+url.split("/").slice(-1)[0]);
+  const buf=await res.arrayBuffer();
+  // 青空文庫は Shift_JIS。まれに UTF-8 のものがあるので置換文字の少ない方を採る。
+  const bad=s=>(s.match(/\uFFFD/g)||[]).length;
+  const a=new TextDecoder("shift_jis").decode(buf);
+  if(bad(a)===0) return a;
+  const b=new TextDecoder("utf-8").decode(buf);
+  return bad(b)<bad(a) ? b : a;
+}
+
+// 本文HTML → 青空文庫記法テキスト
+function htmlToAozora(html){
+  const doc=new DOMParser().parseFromString(html,"text/html");
+  const main=doc.querySelector(".main_text");
+  if(!main) throw new Error("本文が見つかりません");
+  main.querySelectorAll("rp, .notes, .chitsuke, .jisage_kaishi, .jisage_owari").forEach(e=>e.remove());
+  main.querySelectorAll("ruby").forEach(r=>{
+    const rt=[...r.querySelectorAll("rt")].map(e=>e.textContent).join("");
+    [...r.querySelectorAll("rt")].forEach(e=>e.remove());
+    const base=r.textContent;
+    r.replaceWith(document.createTextNode(rt ? base+"《"+rt+"》" : base));
+  });
+  main.querySelectorAll("img").forEach(i=>i.replaceWith(document.createTextNode(i.alt||"〓")));
+  main.querySelectorAll("br").forEach(b=>b.replaceWith(document.createTextNode("\n")));
+  main.querySelectorAll("div,p,h1,h2,h3,h4").forEach(d=>d.appendChild(document.createTextNode("\n")));
+  return main.textContent
+    .replace(/\r\n?/g,"\n")
+    .replace(/［＃[^］]*］/g,"")
+    .replace(/\n{3,}/g,"\n\n")
+    .trim();
+}
+
+async function loadCard(person, work, onStatus){
+  const say=m=>onStatus&&onStatus(m);
+  say("カード情報を取得中…");
+  const cardUrl=`${GH}cards/${person}/card${work}.html`;
+  const card=await fetchSJIS(cardUrl);
+  const cdoc=new DOMParser().parseFromString(card,"text/html");
+  const text=cdoc.body ? cdoc.body.textContent : card;
+
+  const kana=(text.match(/新字新仮名|新字旧仮名|旧字旧仮名|旧字新仮名/)||[])[0]||"不明";
+  const title=(cdoc.querySelector("font[size='+2']")||{}).textContent
+           || (text.match(/作品名：\s*([^\n]+)/)||[])[1] || "作品";
+  const author=(text.match(/著者名：\s*([^\n]+)/)||[])[1]
+            || (text.match(/[著訳]者名：\s*([^\n]+)/)||[])[1] || "";
+
+  // 本文（XHTML版）へのリンクを探す
+  const m=card.match(/href="\.?\/?(files\/[0-9A-Za-z_\-]+\.html)"/);
+  if(!m) throw new Error("本文ファイルへのリンクが見つかりません");
+  say("本文を取得中…");
+  const body=await fetchSJIS(`${GH}cards/${person}/${m[1]}`);
+  return { title:title.trim(), author:author.trim(), kana, text:htmlToAozora(body) };
+}
+
+/* ── 作品選択パネル ── */
+const dlg=$("picker"), dlgStatus=$("pkStatus");
+function openPicker(){
+  dlg.hidden=false;
+  if(!dlg.dataset.built){
+    const list=$("pkList");
+    for(const [t,a,p,w] of PRESETS){
+      const b=document.createElement("button");
+      b.className="pkItem"; b.innerHTML=`<span>${t}</span><em>${a}</em>`;
+      b.addEventListener("click", ()=>grab(()=>loadCard(p,w,s=>dlgStatus.textContent=s)));
+      list.appendChild(b);
+    }
+    dlg.dataset.built="1";
+  }
+}
+function closePicker(){ dlg.hidden=true; editor.focus(); placeCaret(); }
+async function grab(fn){
+  dlgStatus.textContent="読み込み中…"; dlg.classList.add("busy");
+  try{
+    const w=await fn();
+    if(!w.text || w.text.length<20) throw new Error("本文が空です");
+    if(w.kana && w.kana!=="新字新仮名" && w.kana!=="不明")
+      dlgStatus.textContent=`※ ${w.kana} の作品です`;
+    applyWork(w); closePicker();
+  }catch(err){
+    dlgStatus.textContent="失敗: "+err.message
+      +"（サンドボックス内では外部通信が遮断されることがあります。下の貼り付けをお使いください）";
+    log("fetchError", err.message);
+  }finally{ dlg.classList.remove("busy"); }
+}
+$("works").addEventListener("click", openPicker);
+$("pkClose").addEventListener("click", closePicker);
+$("pkUrlGo").addEventListener("click", ()=>{
+  const v=$("pkUrl").value.trim();
+  const m=v.match(/cards\/(\d{6})\/card(\d+)/);
+  if(!m){ dlgStatus.textContent="カードURLの形式が違います（…/cards/000148/card789.html）"; return; }
+  grab(()=>loadCard(m[1],m[2],s=>dlgStatus.textContent=s));
+});
+$("pkPasteGo").addEventListener("click", ()=>{
+  const t=$("pkPaste").value;
+  if(t.trim().length<20){ dlgStatus.textContent="本文を貼り付けてください"; return; }
+  grab(async()=>({title:$("pkTitle").value.trim()||"貼り付けテキスト", author:"", kana:"不明", text:t}));
+});
+
+if(document.fonts && document.fonts.ready) document.fonts.ready.then(()=>{ measureProbes(); winStart=-1; updateTape(); });
+applyWork(SAMPLE);
+</script>
+</body>
+</html>
