@@ -1,6 +1,8 @@
 # 読書タイピング「yomikaki」
 
-読書しながらタイピングできる練習サイト。
+読書しながらタイピングできる練習サイト (開発中)
+
+- [cognitom.github.io/yomikaki/](https://cognitom.github.io/yomikaki/)
 
 小説を読みながら、**かな入力＋漢字変換**を練習するための特殊テキストエディタ。
 
