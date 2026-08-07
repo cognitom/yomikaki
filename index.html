@@ -27,6 +27,9 @@
   --gap:2;
   --fs:1.35rem;
   --tapeH:4.6rem;
+  /* 半角スペースはそのままだと狭くてテープ上で判別しにくい。
+     入力欄・テープ・実測用プローブの3つすべてに同じ値を掛けること（字送りの一致）。 */
+  --wordsp:.25em;
   /* ホーム画面から起動したときのノッチ／ホームインジケータ避け */
   --safeT:env(safe-area-inset-top,0px);
   --safeB:env(safe-area-inset-bottom,0px);
@@ -95,6 +98,7 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
   /* 英数字はテープでは1セル＝1文字の inline-block なのでカーニングが効かない。
      入力欄だけ AV / To のようなペアが詰まると、その分テープが左へ流れる。 */
   font-kerning:none;font-variant-ligatures:none;
+  word-spacing:var(--wordsp);
   white-space:pre-wrap;    /* 半角スペースを潰さない。潰れると caretX が進まずテープが飛ぶ */
   outline:none;
   min-height:calc(var(--fs) * 1.9);
@@ -129,6 +133,7 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
   line-height:1;
   letter-spacing:normal;
   font-kerning:none;font-variant-ligatures:none;   /* 入力欄と揃える */
+  word-spacing:var(--wordsp);
   transition:transform .18s cubic-bezier(.22,.7,.3,1);
   will-change:transform;
 }
@@ -193,7 +198,7 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
 .pkStatus{font-size:.68rem;color:var(--shu);line-height:1.6;min-height:1.2em}
 .pk.busy{pointer-events:none;opacity:.7}
 
-.probe{position:absolute;visibility:hidden;white-space:pre;font-size:var(--fs);font-family:var(--mincho)}
+.probe{position:absolute;visibility:hidden;white-space:pre;font-size:var(--fs);font-family:var(--mincho);word-spacing:var(--wordsp)}
 #logbox{
   position:fixed;right:0;top:3.2rem;width:16rem;height:min(62vh,26rem);z-index:9;
   font-family:var(--util);font-size:.6rem;line-height:1.5;

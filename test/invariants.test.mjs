@@ -65,6 +65,17 @@ test("入力欄とテープでカーニングを同じく切る", () => {
   }
 });
 
+test("半角スペースの幅は入力欄・テープ・プローブの3つで揃える", () => {
+  // word-spacing を1つでも掛け忘れると、そこだけ空白の送り幅が変わる。
+  // .probe は estW（未描画セルの推定）で使う実測値なので、同じ条件で測らなければならない。
+  assert.match(css, /--wordsp:/);
+  for (const [name, re] of [["editor", /\.editor\{[\s\S]*?\}/],
+                            ["tape",   /\.tape\{[\s\S]*?\}/],
+                            ["probe",  /\.probe\{[^}]*\}/]]) {
+    assert.match(css.match(re)[0], /word-spacing:var\(--wordsp\)/, name);
+  }
+});
+
 test("未描画セルの幅の推定が描画のしかたと対応している", () => {
   const est = js.match(/function estW\(i\)\{([\s\S]*?)\n\}/)[1];
   assert.match(est, /ch==="\\n"\) return brkW/, "¶ は .cell.brk で1マス固定");
