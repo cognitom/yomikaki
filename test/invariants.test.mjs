@@ -106,6 +106,24 @@ test("お手本と入力が同じ半角化関数を通る", () => {
   assert.match(js, /function normalizeInput\(s\)\{ return toHalf\(s\)/);
 });
 
+// ── 類似記号の統一（issue #4）──
+
+test("類似記号の統一は判定用キーにだけ掛ける", () => {
+  // 表示まで寄せると 〇 と ○ の書き分けという原文の情報が消える。
+  // トークンとテープは target（原文のまま）、照合は targetKey を使う。
+  assert.match(js, /tokens\.push\(\{ch:toHalf\(c\)/, "トークンの字を寄せてはいけない");
+  assert.doesNotMatch(js, /tokens\.push\(\{ch:unify/);
+  assert.match(js, /Mloc = targetKey\.slice\(anchorT/, "照合窓は targetKey から切り出す");
+  assert.match(js, /const key=unify\(ch\);\s*\n\s*typed\.push\(\{ch, key,/,
+    "打った字は ch に残し、寄せた字は key に持つ");
+});
+
+test("正誤の比較は両側とも寄せた字で行う", () => {
+  // 片側だけ寄せると、寄せ対象の記号が必ず ng になる
+  assert.match(js, /const sub=prev\[j-1\]\+\(key===Mloc\[j-1\]\?0:1\)/);
+  assert.match(js, /eq = j>0 && it\.key===Mloc\[j-1\]/);
+});
+
 // ── 入力スキップの対象（issue #3）──
 
 test("スキップ規則はリストで持つ", () => {
