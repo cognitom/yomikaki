@@ -44,21 +44,35 @@ test("入力欄とテープの letter-spacing が一致している", () => {
 
 // ── 半角／全角の統一（issue #2）で新たに増えた不変条件 ──
 
-test("半角英数の字幅は入力欄とテープで同じ判定を共有する", () => {
-  // 片方だけ半角幅だと caretX とテープセルの進み方がずれ、1文字ごとにテープが揺れる
-  assert.match(css, /\.zen\{[^}]*width:1em/);
-  assert.match(js, /<span class="\$\{it\.cls\}\$\{zenCls\(it\.ch\)\}">/, "入力欄側");
-  assert.match(js, /el\.className="cell" \+ \(brk\?" brk zen":zenCls\(tk\.ch\)\)/, "テープ側");
+test("英数字はテープでも入力欄でも可変幅のまま", () => {
+  // 全角1マスに固定するとテープの見た目が不自然になる。両方とも実際の字幅に任せ、
+  // 同じフォント・同じサイズ・letter-spacing:normal であることで字送りを一致させる。
+  // どちらか片方だけに幅を与えると、ASCII を打つあいだテープが1文字ごとに揺れる。
+  assert.doesNotMatch(css, /\.zen\b/);
+  assert.doesNotMatch(js, /zenCls/);
+  // セルに幅を与えてよいのは、入力欄に対応する文字を持たない ¶ だけ
+  const withWidth = [...css.matchAll(/\.cell(\.[\w-]+)?\{[^}]*[^-]width:/g)].map(m => m[1]);
+  assert.deepEqual(withWidth, [".brk"]);
 });
 
-test("未描画セルの幅の推定が実幅と食い違わない", () => {
-  // estW は仮想化の左スペーサ幅に使う。実幅とずれると offsetLeft がずれてテープが飛ぶ。
+test("入力欄とテープでカーニングを同じく切る", () => {
+  // テープは1セル＝1文字の inline-block なのでペアカーニングが効かない。
+  // 入力欄だけ AV / To のようなペアが詰まると、その差の分テープが左へ流れる。
+  for (const [name, re] of [["editor", /\.editor\{[\s\S]*?\}/], ["tape", /\.tape\{[\s\S]*?\}/]]) {
+    const block = css.match(re)[0];
+    assert.match(block, /font-kerning:none/, name);
+    assert.match(block, /font-variant-ligatures:none/, name);
+  }
+});
+
+test("未描画セルの幅の推定が描画のしかたと対応している", () => {
   const est = js.match(/function estW\(i\)\{([\s\S]*?)\n\}/)[1];
-  assert.match(est, /ch===" "\) return spaceW/, "実幅のままなのは半角スペースだけ");
-  assert.match(est, /ASCII_VIS\.test\(ch\)\) \? zenW/, "makeCell の .zen と同じ判定を使う");
-  assert.doesNotMatch(est, /x20-\\x7E/, "ASCII 全体を半角幅で推定してはいけない（.zen で全角1マス）");
-  // 1em が 国 の字幅と一致する保証はないので、.zen の実幅も実測する
-  assert.match(js, /probe\.className="probe zen"[\s\S]*?zenW=probe\.getBoundingClientRect\(\)\.width/);
+  assert.match(est, /ch==="\\n"\) return brkW/, "¶ は .cell.brk で1マス固定");
+  assert.match(est, /ch===" "\)  return spaceW/, "半角スペースは実測値");
+  assert.match(est, /ASCII_VIS\.test\(ch\) \? halfW : fullW/);
+  // 半角スペースと ¶ は実測する（フォント依存の値を決め打ちしない）
+  assert.match(js, /probe\.textContent=" ";  spaceW=probe\.getBoundingClientRect\(\)\.width/);
+  assert.match(js, /brkW=parseFloat\(getComputedStyle\(tape\)\.fontSize\)/);
 });
 
 test("半角スペースを潰さない", () => {

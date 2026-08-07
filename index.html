@@ -92,6 +92,9 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
   margin-top:auto;
   font-size:var(--fs);line-height:1.9;
   letter-spacing:normal;   /* テープと字送りを一致させるため必須 */
+  /* 英数字はテープでは1セル＝1文字の inline-block なのでカーニングが効かない。
+     入力欄だけ AV / To のようなペアが詰まると、その分テープが左へ流れる。 */
+  font-kerning:none;font-variant-ligatures:none;
   white-space:pre-wrap;    /* 半角スペースを潰さない。潰れると caretX が進まずテープが飛ぶ */
   outline:none;
   min-height:calc(var(--fs) * 1.9);
@@ -101,10 +104,6 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
 .editor .ok{color:var(--ink)}
 .editor .ng{color:var(--shu);background:rgba(180,56,46,.09);border-radius:1px}
 .editor .auto{color:var(--mute)}
-/* 半角に統一した英数記号は、テープの原稿用紙マスと入力欄の字送りを
-   両方とも全角1マスに揃える。片方だけ半角幅だとテープが1文字ごとに揺れる。
-   半角スペースは統一対象外なので、このクラスを付けず実幅のまま。 */
-.zen{display:inline-block;width:1em;text-align:center}
 .anchor{display:inline-block;width:0;height:1em;vertical-align:baseline}
 .compose{display:inline;min-height:1em}
 .hint{
@@ -129,6 +128,7 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
   font-size:var(--fs);
   line-height:1;
   letter-spacing:normal;
+  font-kerning:none;font-variant-ligatures:none;   /* 入力欄と揃える */
   transition:transform .18s cubic-bezier(.22,.7,.3,1);
   will-change:transform;
 }
@@ -142,7 +142,7 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
 }
 .cell.past{opacity:.28}
 .cell.now{color:var(--shu)}
-.cell.brk{color:var(--rule);opacity:.5}
+.cell.brk{color:var(--rule);opacity:.5;width:1em;text-align:center}
 .cell.auto{color:var(--rule);opacity:.55}
 .cell.end{color:var(--rule);letter-spacing:.2em;padding-left:.4em}
 .rbase{position:relative;display:inline-block;vertical-align:baseline}
@@ -306,10 +306,10 @@ function toHalf(s){ return s.replace(ZENKAKU, c => String.fromCharCode(c.charCod
 // 確定文字列から改行を落として半角化する。入力欄に入る文字はすべてここを通る。
 function normalizeInput(s){ return toHalf(s).replace(/[\n\r]/g,""); }
 
-/* 全角1マスぶんの字送りにする文字か。半角スペースだけは実幅のまま扱う。
-   テープのセルと入力欄の文字の両方に同じ判定を使い、字送りを一致させる。 */
+/* 半角スペースを除く ASCII 可視文字。字幅の推定にだけ使う。
+   英数字はテープでも入力欄でも可変幅のまま描く（全角1マスに揃えるとテープの見た目が
+   不自然になる）。同じフォント・同じサイズ・letter-spacing:normal なので字送りは一致する。 */
 const ASCII_VIS = /[\x21-\x7E]/;
-function zenCls(ch){ return ASCII_VIS.test(ch) ? " zen" : ""; }
 
 function parseAozora(src){
   src = src.replace(/^-{10,}[\s\S]*?-{10,}\n/,"")      // 冒頭の凡例ブロック
@@ -436,7 +436,7 @@ function renderRange(a,b,em,tail){
   for(let k=a;k<b;k++){
     const it=typed[k];
     if(it.c>=e){ for(let u=e;u<=it.c;u++) if(pre[u]) out+=autoHTML(pre[u]); e=it.c+1; }
-    out += `<span class="${it.cls}${zenCls(it.ch)}">${esc(it.ch)}</span>`;
+    out += `<span class="${it.cls}">${esc(it.ch)}</span>`;
   }
   if(tail!=null){ for(let u=e;u<=tail;u++) if(pre[u]) out+=autoHTML(pre[u]); }
   return {html:out, em:e};
@@ -504,24 +504,24 @@ const tape=$("tape"), tapewrap=$("tapewrap"), tapecaret=$("tapecaret"), probe=$(
 const HALF=400, EDGE=150, LOOKAHEAD=7, EDGE_PAD=16;
 let tokenW=new Float64Array(0), cum=new Float64Array(1);
 let cellEls=new Map(), winStart=-1, winEnd=-1, prevNow=-1;
-let fullW=0, spaceW=0, zenW=0;
+let fullW=0, halfW=0, spaceW=0, brkW=0;
 
 function measureProbes(){
-  probe.className="probe";
   probe.textContent="国"; fullW=probe.getBoundingClientRect().width;
+  probe.textContent="n";  halfW=probe.getBoundingClientRect().width || fullW/2;
   probe.textContent=" ";  spaceW=probe.getBoundingClientRect().width || fullW/2;
-  // .zen の 1em が 国 の字幅と一致する保証はない（フォールバックフォント）ので実測する
-  probe.className="probe zen"; probe.textContent="A";
-  zenW=probe.getBoundingClientRect().width || fullW;
-  probe.className="probe"; probe.textContent="";
+  probe.textContent="";
+  brkW=parseFloat(getComputedStyle(tape).fontSize) || fullW;  // .cell.brk の 1em
 }
-// 未描画セルの幅の推定。makeCell の字幅クラスの付け方と1対1で対応させる。
-// ずれると仮想化の左スペーサ幅がずれ、offsetLeft がずれてテープが飛ぶ。
+// 未描画セルの幅の推定。英数字は可変幅なので halfW はあくまで概算だが、
+// 描画済みのセルは実測値（tokenW）に置き換わり、左スペーサの誤差は tx の算出で
+// 打ち消される（画面上の位置は窓内の実測差分だけで決まる）ため、位置合わせには効かない。
 function estW(i){
   if(tokens[i].end) return fullW*1.6;
   const ch=tokens[i].ch;
-  if(ch===" ") return spaceW;                              // 統一対象外。実幅のまま
-  return (ch==="\n" || ASCII_VIS.test(ch)) ? zenW : fullW; // .zen が付くセル
+  if(ch==="\n") return brkW;                    // ¶ は1マス固定
+  if(ch===" ")  return spaceW;
+  return ASCII_VIS.test(ch) ? halfW : fullW;
 }
 function rebuildCum(){
   let s=0;
@@ -531,8 +531,7 @@ function rebuildCum(){
 function makeCell(tk,i){
   const el=document.createElement("span");
   const brk = tk.ch==="\n";
-  // ¶ のグリフ幅はフォント依存なので、半角英数と同じく全角1マスに固定して推定と揃える
-  el.className="cell" + (brk?" brk zen":zenCls(tk.ch)) + (tk.end?" end":"")
+  el.className="cell" + (brk?" brk":"") + (tk.end?" end":"")
               + (!tk.typable && !tk.end && !brk ? " auto":"");
   el.textContent = brk ? "¶" : tk.ch;
   return el;

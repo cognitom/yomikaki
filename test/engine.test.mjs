@@ -103,19 +103,12 @@ test("入力の半角化: 全角で打っても半角のお手本と一致する
   C.setDoc(C.SAMPLE);
 });
 
-test("字幅クラス: 半角スペース以外の ASCII だけ全角1マスに揃える", () => {
-  for (const ch of "AZaz09!~|\\") assert.equal(C.zenCls(ch), " zen", ch);
-  assert.equal(C.zenCls(" "), "", "半角スペースは実幅のまま");
-  for (const ch of "あ漢　。") assert.equal(C.zenCls(ch), "", ch);
-});
-
-test("字幅クラスはテープと入力欄の両方に同じものが付く", () => {
+test("入力欄の描画は英数字にも幅を指定しない（可変幅のまま）", () => {
   C.setDoc({ title: "t", author: "", text: "Ａあ" });
   C.engineReset();
   for (const ch of "Aあ") { C.step(ch); C.reclassify(); C.maybeAnchor(); }
   const html = C.renderRange(0, 2, 0, 2).html;
-  assert.match(html, /<span class="ok zen">A<\/span>/);
-  assert.match(html, /<span class="ok">あ<\/span>/);
+  assert.equal(html, '<span class="ok">A</span><span class="ok">あ</span>');
   C.setDoc(C.SAMPLE);
 });
 
