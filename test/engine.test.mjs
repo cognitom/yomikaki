@@ -112,13 +112,89 @@ test("入力欄の描画は英数字にも幅を指定しない（可変幅の�
   C.setDoc(C.SAMPLE);
 });
 
+// 描画結果からタグを剥がして素のテキストに戻す
+const plain = h => h.replace(/<br>/g, "\n").replace(/<span[^>]*>([\s\S]*?)<\/span>/g, "$1");
+
+// ── 入力スキップの対象（issue #3） ──
+
+// pre[] に溜まった自動入力文字をすべて連結する（テープには出るが打鍵対象ではないもの）
+const autos = d => Object.values(d.pre).filter(Boolean).join("");
+// トークン列を復元する。ノイズ行はここにも現れない
+const tapeText = d => d.tokens.filter(t => !t.end).map(t => t.ch).join("");
+
+test("章見出しの行は自動入力になり、本文としては残る", () => {
+  const d = C.parseAozora("第一章\n本文です。");
+  assert.equal(d.target, "本文です。", "見出しは打鍵対象から外れる");
+  assert.equal(autos(d), "第一章\n", "見出しと改行は自動入力される");
+  assert.ok(tapeText(d).startsWith("第一章"), "テープには残る");
+});
+
+test("章見出しのいろいろな書き方を拾う", () => {
+  for (const h of ["第一章", "第2章 出発", "三", "12", "序", "あとがき", "幕間", "＊＊＊"]) {
+    const d = C.parseAozora(h + "\n本文です。");
+    assert.equal(d.target, "本文です。", `見出しとして扱われていない: ${h}`);
+  }
+});
+
+test("見出しに似た本文行は打鍵対象のまま残す", () => {
+  for (const line of ["第一部が完成した。", "第一章が終わった。", "序の口である。", "一人だった。"]) {
+    const d = C.parseAozora(line);
+    assert.equal(d.target, line, `本文を見出しと誤判定した: ${line}`);
+  }
+});
+
+test("打ちようのない記号は文中でも自動入力になる", () => {
+  const d = C.parseAozora("あ‡い※う");
+  assert.equal(d.target, "あいう");
+  assert.equal(autos(d), "‡※");
+  assert.ok(tapeText(d).includes("‡"), "記号自体はテープに残る");
+});
+
+test("挿絵・外字だけの行はテープからも消える", () => {
+  const d = C.parseAozora("前の行。\n挿絵1\n〓\n次の行。");
+  assert.equal(d.target, "前の行。次の行。");
+  assert.ok(!tapeText(d).includes("挿絵"), "ノイズ行はトークンにも残さない");
+  assert.ok(!tapeText(d).includes("〓"));
+  assert.equal(autos(d), "\n", "行が消えたぶん改行も1つに詰まる");
+});
+
+test("スキップ規則は記法を解いた後に掛かる", () => {
+  // ［＃…］が残っていると行全体の照合が効かない
+  const d = C.parseAozora("［＃３字下げ］第一章［＃「第一章」は中見出し］\n本文です。");
+  assert.equal(d.target, "本文です。");
+});
+
+test("スキップ規則はリストに1行足すだけで増やせる", () => {
+  assert.ok(Array.isArray(C.NOISE_LINES) && Array.isArray(C.AUTO_LINES));
+  for (const re of [...C.NOISE_LINES, ...C.AUTO_LINES]) assert.ok(re instanceof RegExp);
+  assert.ok(!C.AUTO_CHARS.global, "文字判定の正規表現は /g だと lastIndex で取りこぼす");
+});
+
+test("applySkips: 自動入力の位置は整形後テキストの添字と一致する", () => {
+  const { text, auto } = C.applySkips("挿絵1\n第一章\nあ‡い");
+  assert.equal(text, "第一章\nあ‡い");
+  assert.equal([...auto].join(""), "1110010", "見出し3文字と ‡ だけが立つ");
+});
+
+test("スキップした見出しを打たずに先へ進める", () => {
+  C.setDoc({ title: "t", author: "", text: "第一章\n吾輩は猫である。" });
+  assert.equal(C.state.target, "吾輩は猫である。");
+  C.engineReset();
+  for (const ch of "吾輩は猫である。") { C.step(ch); C.reclassify(); C.maybeAnchor(); }
+  assert.equal(C.state.cursor, 8);
+  assert.ok(C.state.typed.every(t => t.cls === "ok"));
+  // 描画では見出しが自動入力として先頭に入る
+  assert.equal(plain(C.renderRange(0, C.state.typed.length, 0, C.state.cursor).html),
+               "第一章\n吾輩は猫である。");
+  C.setDoc(C.SAMPLE);
+});
+
 // ── ファズ：ランダムな変換単位と誤入力で、自動挿入位置が常に正しいこと ──
 function truth(p, pre, T) {
   let s = "";
   for (let u = 0; u <= p; u++) { if (pre[u]) s += pre[u]; if (u < p) s += T[u]; }
   return s;
 }
-const plain = h => h.replace(/<br>/g, "\n").replace(/<span[^>]*>([\s\S]*?)<\/span>/g, "$1");
 
 test("ファズ: 正しく打つ限り、描画結果は原文と完全に一致する", () => {
   const pre = C.state.pre;
