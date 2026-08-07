@@ -27,6 +27,9 @@
   --gap:2;
   --fs:1.35rem;
   --tapeH:4.6rem;
+  /* 半角スペースはそのままだと狭くてテープ上で判別しにくい。
+     入力欄・テープ・実測用プローブの3つすべてに同じ値を掛けること（字送りの一致）。 */
+  --wordsp:.25em;
   /* ホーム画面から起動したときのノッチ／ホームインジケータ避け */
   --safeT:env(safe-area-inset-top,0px);
   --safeB:env(safe-area-inset-bottom,0px);
@@ -92,6 +95,11 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
   margin-top:auto;
   font-size:var(--fs);line-height:1.9;
   letter-spacing:normal;   /* テープと字送りを一致させるため必須 */
+  /* 英数字はテープでは1セル＝1文字の inline-block なのでカーニングが効かない。
+     入力欄だけ AV / To のようなペアが詰まると、その分テープが左へ流れる。 */
+  font-kerning:none;font-variant-ligatures:none;
+  word-spacing:var(--wordsp);
+  white-space:pre-wrap;    /* 半角スペースを潰さない。潰れると caretX が進まずテープが飛ぶ */
   outline:none;
   min-height:calc(var(--fs) * 1.9);
   overflow-wrap:anywhere;
@@ -124,19 +132,22 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
   font-size:var(--fs);
   line-height:1;
   letter-spacing:normal;
+  font-kerning:none;font-variant-ligatures:none;   /* 入力欄と揃える */
+  word-spacing:var(--wordsp);
   transition:transform .18s cubic-bezier(.22,.7,.3,1);
   will-change:transform;
 }
 .sp{display:inline-block;height:1px;vertical-align:baseline}
 .cell{
   display:inline-block;
+  white-space:pre;         /* 半角スペースのセルが幅0に潰れるのを防ぐ */
   box-shadow:inset -1px 0 0 var(--rule-soft);
   color:var(--ink);
   transition:opacity .18s ease,color .18s ease;
 }
 .cell.past{opacity:.28}
 .cell.now{color:var(--shu)}
-.cell.brk{color:var(--rule);opacity:.5}
+.cell.brk{color:var(--rule);opacity:.5;width:1em;text-align:center}
 .cell.auto{color:var(--rule);opacity:.55}
 .cell.end{color:var(--rule);letter-spacing:.2em;padding-left:.4em}
 .rbase{position:relative;display:inline-block;vertical-align:baseline}
@@ -187,7 +198,7 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
 .pkStatus{font-size:.68rem;color:var(--shu);line-height:1.6;min-height:1.2em}
 .pk.busy{pointer-events:none;opacity:.7}
 
-.probe{position:absolute;visibility:hidden;white-space:nowrap;font-size:var(--fs);font-family:var(--mincho)}
+.probe{position:absolute;visibility:hidden;white-space:pre;font-size:var(--fs);font-family:var(--mincho);word-spacing:var(--wordsp)}
 #logbox{
   position:fixed;right:0;top:3.2rem;width:16rem;height:min(62vh,26rem);z-index:9;
   font-family:var(--util);font-size:.6rem;line-height:1.5;
@@ -286,6 +297,25 @@ const SAMPLE = {
 const KANJI = /[\u3005\u3006\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF]/;
 const KATA  = /[\u30A1-\u30FA\u30FC]/;
 
+/* ── 半角／全角の統一 ──
+   全角英数記号（U+FF01–FF5E ＝ 英字・数字・キーボードから直接打てる記号）を半角に寄せる。
+   お手本も入力も同じ関数を通すので、どちらで打っても正誤判定は一致する。
+
+   ・全角スペース U+3000 は対象外。行頭の字下げは自動入力の対象なので、
+     半角化すると自動入力と手動入力の境界が壊れる。
+   ・半角スペースもそのまま。英文中の空白まで自動入力にすると打鍵のペースが崩れる。
+   ・青空文庫記法のルビ区切り ｜(U+FF5C) と注記の ＃(U+FF03) はこの範囲に入る。
+     そのため正規化は「パースより後」でなければならない（トークン化時に一文字ずつ掛ける）。 */
+const ZENKAKU = /[\uFF01-\uFF5E]/g;
+function toHalf(s){ return s.replace(ZENKAKU, c => String.fromCharCode(c.charCodeAt(0)-0xFEE0)); }
+// 確定文字列から改行を落として半角化する。入力欄に入る文字はすべてここを通る。
+function normalizeInput(s){ return toHalf(s).replace(/[\n\r]/g,""); }
+
+/* 半角スペースを除く ASCII 可視文字。字幅の推定にだけ使う。
+   英数字はテープでも入力欄でも可変幅のまま描く（全角1マスに揃えるとテープの見た目が
+   不自然になる）。同じフォント・同じサイズ・letter-spacing:normal なので字送りは一致する。 */
+const ASCII_VIS = /[\x21-\x7E]/;
+
 function parseAozora(src){
   src = src.replace(/^-{10,}[\s\S]*?-{10,}\n/,"")      // 冒頭の凡例ブロック
            .replace(/\n底本：[\s\S]*$/,"")              // 底本以降
@@ -307,7 +337,8 @@ function parseAozora(src){
       }
       continue;
     }
-    tokens.push({ch:c, typable:c!=="\n" && !(c==="　" && (tokens.length===0||tokens[tokens.length-1].ch==="\n"))});
+    // 半角化は記法（｜《》［＃…］）を解いた後。先に掛けると区切り文字そのものが壊れる
+    tokens.push({ch:toHalf(c), typable:c!=="\n" && !(c==="　" && (tokens.length===0||tokens[tokens.length-1].ch==="\n"))});
   }
   tokens.push({ch:"了", typable:false, end:true});
 
@@ -478,17 +509,24 @@ const tape=$("tape"), tapewrap=$("tapewrap"), tapecaret=$("tapecaret"), probe=$(
 const HALF=400, EDGE=150, LOOKAHEAD=7, EDGE_PAD=16;
 let tokenW=new Float64Array(0), cum=new Float64Array(1);
 let cellEls=new Map(), winStart=-1, winEnd=-1, prevNow=-1;
-let fullW=0, halfW=0;
+let fullW=0, halfW=0, spaceW=0, brkW=0;
 
 function measureProbes(){
   probe.textContent="国"; fullW=probe.getBoundingClientRect().width;
-  probe.textContent="M";  halfW=probe.getBoundingClientRect().width;
+  probe.textContent="n";  halfW=probe.getBoundingClientRect().width || fullW/2;
+  probe.textContent=" ";  spaceW=probe.getBoundingClientRect().width || fullW/2;
   probe.textContent="";
+  brkW=parseFloat(getComputedStyle(tape).fontSize) || fullW;  // .cell.brk の 1em
 }
+// 未描画セルの幅の推定。英数字は可変幅なので halfW はあくまで概算だが、
+// 描画済みのセルは実測値（tokenW）に置き換わり、左スペーサの誤差は tx の算出で
+// 打ち消される（画面上の位置は窓内の実測差分だけで決まる）ため、位置合わせには効かない。
 function estW(i){
-  const c=tokens[i].ch;
   if(tokens[i].end) return fullW*1.6;
-  return /[\x20-\x7E]/.test(c) ? halfW : fullW;
+  const ch=tokens[i].ch;
+  if(ch==="\n") return brkW;                    // ¶ は1マス固定
+  if(ch===" ")  return spaceW;
+  return ASCII_VIS.test(ch) ? halfW : fullW;
 }
 function rebuildCum(){
   let s=0;
@@ -497,9 +535,10 @@ function rebuildCum(){
 }
 function makeCell(tk,i){
   const el=document.createElement("span");
-  el.className="cell" + (tk.ch==="\n"?" brk":"") + (tk.end?" end":"")
-              + (!tk.typable && !tk.end && tk.ch!=="\n" ? " auto":"");
-  el.textContent = tk.ch==="\n" ? "¶" : tk.ch;
+  const brk = tk.ch==="\n";
+  el.className="cell" + (brk?" brk":"") + (tk.end?" end":"")
+              + (!tk.typable && !tk.end && !brk ? " auto":"");
+  el.textContent = brk ? "¶" : tk.ch;
   return el;
 }
 function buildWindow(center){
@@ -677,7 +716,8 @@ function commit(s){
     hintEl.classList.add("gone");
     // 1文字ずつ判定する。まとめて判定すると、1回の確定が照合窓(WIN)を
     // 超えたときにアンカーが進まず cursor が頭打ちになる。
-    for(const ch of s){ if(ch==="\n"||ch==="\r") continue; step(ch); reclassify(); maybeAnchor(); }
+    // 全角で打たれた英数記号は半角に寄せてから照合する（お手本も半角に統一済み）
+    for(const ch of normalizeInput(s)){ step(ch); reclassify(); maybeAnchor(); }
     commits++;
     log("COMMIT", s+" → cursor "+before+"→"+cursor);
   }
