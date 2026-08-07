@@ -61,6 +61,64 @@ test("アンカーが進んでも長文で cursor がずれない", () => {
   assert.ok(C.state.anchorK > 0, "アンカーが前進していること");
 });
 
+// ── 半角／全角の統一（issue #2） ──
+
+test("半角化: 英字・数字・記号は寄せ、全角スペースと和文はそのまま", () => {
+  assert.equal(C.toHalf("ＡＢＣａｂｃ０１２"), "ABCabc012");
+  assert.equal(C.toHalf("！＃＄％＆（）＊＋，－．／：；＜＝＞？＠［＼］＾＿｀｛｜｝～"),
+                        '!#$%&()*+,-./:;<=>?@[\\]^_`{|}~');
+  assert.equal(C.toHalf("　"), "　", "全角スペースは統一対象外");
+  assert.equal(C.toHalf("吾輩は猫である。"), "吾輩は猫である。");
+  assert.equal(C.toHalf("〜―…"), "〜―…", "波ダッシュ・ダーシ・三点リーダは記号ではなく約物");
+});
+
+test("お手本の半角化は記法パーサより後に掛かる（｜と＃を壊さない）", () => {
+  const d = C.parseAozora("｜ＸＹ《えっくすわい》です［＃改ページ］ＡＢ");
+  assert.equal(d.target, "XYですAB");
+  const ruby = d.tokens.filter(t => t.ruby).map(t => [t.ch, t.ruby, t.rubySpan]);
+  assert.deepEqual(ruby, [["X", "えっくすわい", 2]], "｜ が半角化されるとルビ範囲が壊れる");
+});
+
+test("半角スペースは手動入力のまま、行頭の全角スペースだけ自動入力", () => {
+  const d = C.parseAozora("Ｉ ａｍ ａ ｃａｔ。\n　つぎの行");
+  assert.equal(d.target, "I am a cat。つぎの行", "英文中の半角スペースは打鍵対象として残す");
+  // 自動入力されるのは改行と行頭の全角スペースだけ
+  assert.deepEqual(Object.values(d.pre).filter(Boolean), ["\n　"]);
+});
+
+test("行頭でない全角スペースは半角化も自動入力もされない", () => {
+  const d = C.parseAozora("あ　い");
+  assert.equal(d.target, "あ　い");
+  assert.deepEqual(Object.values(d.pre).filter(Boolean), []);
+});
+
+test("入力の半角化: 全角で打っても半角のお手本と一致する", () => {
+  C.setDoc({ title: "t", author: "", text: "Ａ Ｂ１" });
+  assert.equal(C.state.target, "A B1");
+  C.engineReset();
+  for (const ch of C.normalizeInput("Ａ Ｂ１")) { C.step(ch); C.reclassify(); C.maybeAnchor(); }
+  assert.equal(C.state.cursor, 4);
+  assert.ok(C.state.typed.every(t => t.cls === "ok"));
+  assert.equal(C.state.typed.map(t => t.ch).join(""), "A B1", "描画も半角で残る");
+  C.setDoc(C.SAMPLE);
+});
+
+test("字幅クラス: 半角スペース以外の ASCII だけ全角1マスに揃える", () => {
+  for (const ch of "AZaz09!~|\\") assert.equal(C.zenCls(ch), " zen", ch);
+  assert.equal(C.zenCls(" "), "", "半角スペースは実幅のまま");
+  for (const ch of "あ漢　。") assert.equal(C.zenCls(ch), "", ch);
+});
+
+test("字幅クラスはテープと入力欄の両方に同じものが付く", () => {
+  C.setDoc({ title: "t", author: "", text: "Ａあ" });
+  C.engineReset();
+  for (const ch of "Aあ") { C.step(ch); C.reclassify(); C.maybeAnchor(); }
+  const html = C.renderRange(0, 2, 0, 2).html;
+  assert.match(html, /<span class="ok zen">A<\/span>/);
+  assert.match(html, /<span class="ok">あ<\/span>/);
+  C.setDoc(C.SAMPLE);
+});
+
 // ── ファズ：ランダムな変換単位と誤入力で、自動挿入位置が常に正しいこと ──
 function truth(p, pre, T) {
   let s = "";

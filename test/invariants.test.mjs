@@ -4,8 +4,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-const js = fs.readFileSync(path.resolve(import.meta.dirname, "..", "index.html"), "utf8")
-  .match(/<script>([\s\S]*)<\/script>/)[1];
+const src = fs.readFileSync(path.resolve(import.meta.dirname, "..", "index.html"), "utf8");
+const js = src.match(/<script>([\s\S]*)<\/script>/)[1];
+const css = src.match(/<style>([\s\S]*)<\/style>/)[1];
 
 test("鉄則①: composeEl は空にせず ZWSP を常駐させる", () => {
   assert.match(js, /const ZWSP\s*=\s*"\\u200B"/);
@@ -37,7 +38,52 @@ test("キーリピートを数えない", () => {
 });
 
 test("入力欄とテープの letter-spacing が一致している", () => {
-  const css = fs.readFileSync(path.resolve(import.meta.dirname, "..", "index.html"), "utf8");
   assert.ok(/\.editor\{[\s\S]*?letter-spacing:normal/.test(css));
   assert.ok(/\.tape\{[\s\S]*?letter-spacing:normal/.test(css));
+});
+
+// ── 半角／全角の統一（issue #2）で新たに増えた不変条件 ──
+
+test("半角英数の字幅は入力欄とテープで同じ判定を共有する", () => {
+  // 片方だけ半角幅だと caretX とテープセルの進み方がずれ、1文字ごとにテープが揺れる
+  assert.match(css, /\.zen\{[^}]*width:1em/);
+  assert.match(js, /<span class="\$\{it\.cls\}\$\{zenCls\(it\.ch\)\}">/, "入力欄側");
+  assert.match(js, /el\.className="cell" \+ \(brk\?" brk zen":zenCls\(tk\.ch\)\)/, "テープ側");
+});
+
+test("未描画セルの幅の推定が実幅と食い違わない", () => {
+  // estW は仮想化の左スペーサ幅に使う。実幅とずれると offsetLeft がずれてテープが飛ぶ。
+  const est = js.match(/function estW\(i\)\{([\s\S]*?)\n\}/)[1];
+  assert.match(est, /ch===" "\) return spaceW/, "実幅のままなのは半角スペースだけ");
+  assert.match(est, /ASCII_VIS\.test\(ch\)\) \? zenW/, "makeCell の .zen と同じ判定を使う");
+  assert.doesNotMatch(est, /x20-\\x7E/, "ASCII 全体を半角幅で推定してはいけない（.zen で全角1マス）");
+  // 1em が 国 の字幅と一致する保証はないので、.zen の実幅も実測する
+  assert.match(js, /probe\.className="probe zen"[\s\S]*?zenW=probe\.getBoundingClientRect\(\)\.width/);
+});
+
+test("半角スペースを潰さない", () => {
+  // 入力欄で潰れると caretX が進まず、テープのセルで潰れると幅0になって字送りが壊れる
+  assert.match(css, /\.editor\{[\s\S]*?white-space:pre-wrap/);
+  assert.match(css, /\.cell\{[\s\S]*?white-space:pre/);
+});
+
+test("半角化は記法パーサより後に掛ける", () => {
+  // ルビ区切り ｜(U+FF5C) と注記の ＃(U+FF03) は全角英数記号の範囲に入る。
+  // 原文全体に先に掛けると、記法そのものが壊れる。
+  const parse = js.match(/function parseAozora\(src\)\{([\s\S]*?)\n\}/)[1];
+  const header = parse.slice(0, parse.indexOf("const tokens=[]"));
+  assert.doesNotMatch(header, /toHalf/, "src 全体に掛けてはいけない");
+  assert.match(js, /tokens\.push\(\{ch:toHalf\(c\)/, "トークン化時に一文字ずつ掛ける");
+});
+
+test("お手本と入力が同じ半角化関数を通る", () => {
+  assert.match(js, /for\(const ch of normalizeInput\(s\)\)/);
+  assert.match(js, /function normalizeInput\(s\)\{ return toHalf\(s\)/);
+});
+
+test("全角スペースは半角化の対象外", () => {
+  // U+3000 を半角化すると、行頭の字下げが自動入力の対象から外れて境界が壊れる
+  const re = js.match(/const ZENKAKU = (\/.*?\/g);/)[1];
+  assert.equal(re, "/[\\uFF01-\\uFF5E]/g");
+  assert.ok(!new RegExp(re.slice(1, -2)).test("\u3000"));
 });

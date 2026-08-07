@@ -92,6 +92,7 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
   margin-top:auto;
   font-size:var(--fs);line-height:1.9;
   letter-spacing:normal;   /* テープと字送りを一致させるため必須 */
+  white-space:pre-wrap;    /* 半角スペースを潰さない。潰れると caretX が進まずテープが飛ぶ */
   outline:none;
   min-height:calc(var(--fs) * 1.9);
   overflow-wrap:anywhere;
@@ -100,6 +101,10 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
 .editor .ok{color:var(--ink)}
 .editor .ng{color:var(--shu);background:rgba(180,56,46,.09);border-radius:1px}
 .editor .auto{color:var(--mute)}
+/* 半角に統一した英数記号は、テープの原稿用紙マスと入力欄の字送りを
+   両方とも全角1マスに揃える。片方だけ半角幅だとテープが1文字ごとに揺れる。
+   半角スペースは統一対象外なので、このクラスを付けず実幅のまま。 */
+.zen{display:inline-block;width:1em;text-align:center}
 .anchor{display:inline-block;width:0;height:1em;vertical-align:baseline}
 .compose{display:inline;min-height:1em}
 .hint{
@@ -130,6 +135,7 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
 .sp{display:inline-block;height:1px;vertical-align:baseline}
 .cell{
   display:inline-block;
+  white-space:pre;         /* 半角スペースのセルが幅0に潰れるのを防ぐ */
   box-shadow:inset -1px 0 0 var(--rule-soft);
   color:var(--ink);
   transition:opacity .18s ease,color .18s ease;
@@ -187,7 +193,7 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
 .pkStatus{font-size:.68rem;color:var(--shu);line-height:1.6;min-height:1.2em}
 .pk.busy{pointer-events:none;opacity:.7}
 
-.probe{position:absolute;visibility:hidden;white-space:nowrap;font-size:var(--fs);font-family:var(--mincho)}
+.probe{position:absolute;visibility:hidden;white-space:pre;font-size:var(--fs);font-family:var(--mincho)}
 #logbox{
   position:fixed;right:0;top:3.2rem;width:16rem;height:min(62vh,26rem);z-index:9;
   font-family:var(--util);font-size:.6rem;line-height:1.5;
@@ -286,6 +292,25 @@ const SAMPLE = {
 const KANJI = /[\u3005\u3006\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF]/;
 const KATA  = /[\u30A1-\u30FA\u30FC]/;
 
+/* ── 半角／全角の統一 ──
+   全角英数記号（U+FF01–FF5E ＝ 英字・数字・キーボードから直接打てる記号）を半角に寄せる。
+   お手本も入力も同じ関数を通すので、どちらで打っても正誤判定は一致する。
+
+   ・全角スペース U+3000 は対象外。行頭の字下げは自動入力の対象なので、
+     半角化すると自動入力と手動入力の境界が壊れる。
+   ・半角スペースもそのまま。英文中の空白まで自動入力にすると打鍵のペースが崩れる。
+   ・青空文庫記法のルビ区切り ｜(U+FF5C) と注記の ＃(U+FF03) はこの範囲に入る。
+     そのため正規化は「パースより後」でなければならない（トークン化時に一文字ずつ掛ける）。 */
+const ZENKAKU = /[\uFF01-\uFF5E]/g;
+function toHalf(s){ return s.replace(ZENKAKU, c => String.fromCharCode(c.charCodeAt(0)-0xFEE0)); }
+// 確定文字列から改行を落として半角化する。入力欄に入る文字はすべてここを通る。
+function normalizeInput(s){ return toHalf(s).replace(/[\n\r]/g,""); }
+
+/* 全角1マスぶんの字送りにする文字か。半角スペースだけは実幅のまま扱う。
+   テープのセルと入力欄の文字の両方に同じ判定を使い、字送りを一致させる。 */
+const ASCII_VIS = /[\x21-\x7E]/;
+function zenCls(ch){ return ASCII_VIS.test(ch) ? " zen" : ""; }
+
 function parseAozora(src){
   src = src.replace(/^-{10,}[\s\S]*?-{10,}\n/,"")      // 冒頭の凡例ブロック
            .replace(/\n底本：[\s\S]*$/,"")              // 底本以降
@@ -307,7 +332,8 @@ function parseAozora(src){
       }
       continue;
     }
-    tokens.push({ch:c, typable:c!=="\n" && !(c==="　" && (tokens.length===0||tokens[tokens.length-1].ch==="\n"))});
+    // 半角化は記法（｜《》［＃…］）を解いた後。先に掛けると区切り文字そのものが壊れる
+    tokens.push({ch:toHalf(c), typable:c!=="\n" && !(c==="　" && (tokens.length===0||tokens[tokens.length-1].ch==="\n"))});
   }
   tokens.push({ch:"了", typable:false, end:true});
 
@@ -410,7 +436,7 @@ function renderRange(a,b,em,tail){
   for(let k=a;k<b;k++){
     const it=typed[k];
     if(it.c>=e){ for(let u=e;u<=it.c;u++) if(pre[u]) out+=autoHTML(pre[u]); e=it.c+1; }
-    out += `<span class="${it.cls}">${esc(it.ch)}</span>`;
+    out += `<span class="${it.cls}${zenCls(it.ch)}">${esc(it.ch)}</span>`;
   }
   if(tail!=null){ for(let u=e;u<=tail;u++) if(pre[u]) out+=autoHTML(pre[u]); }
   return {html:out, em:e};
@@ -478,17 +504,24 @@ const tape=$("tape"), tapewrap=$("tapewrap"), tapecaret=$("tapecaret"), probe=$(
 const HALF=400, EDGE=150, LOOKAHEAD=7, EDGE_PAD=16;
 let tokenW=new Float64Array(0), cum=new Float64Array(1);
 let cellEls=new Map(), winStart=-1, winEnd=-1, prevNow=-1;
-let fullW=0, halfW=0;
+let fullW=0, spaceW=0, zenW=0;
 
 function measureProbes(){
+  probe.className="probe";
   probe.textContent="国"; fullW=probe.getBoundingClientRect().width;
-  probe.textContent="M";  halfW=probe.getBoundingClientRect().width;
-  probe.textContent="";
+  probe.textContent=" ";  spaceW=probe.getBoundingClientRect().width || fullW/2;
+  // .zen の 1em が 国 の字幅と一致する保証はない（フォールバックフォント）ので実測する
+  probe.className="probe zen"; probe.textContent="A";
+  zenW=probe.getBoundingClientRect().width || fullW;
+  probe.className="probe"; probe.textContent="";
 }
+// 未描画セルの幅の推定。makeCell の字幅クラスの付け方と1対1で対応させる。
+// ずれると仮想化の左スペーサ幅がずれ、offsetLeft がずれてテープが飛ぶ。
 function estW(i){
-  const c=tokens[i].ch;
   if(tokens[i].end) return fullW*1.6;
-  return /[\x20-\x7E]/.test(c) ? halfW : fullW;
+  const ch=tokens[i].ch;
+  if(ch===" ") return spaceW;                              // 統一対象外。実幅のまま
+  return (ch==="\n" || ASCII_VIS.test(ch)) ? zenW : fullW; // .zen が付くセル
 }
 function rebuildCum(){
   let s=0;
@@ -497,9 +530,11 @@ function rebuildCum(){
 }
 function makeCell(tk,i){
   const el=document.createElement("span");
-  el.className="cell" + (tk.ch==="\n"?" brk":"") + (tk.end?" end":"")
-              + (!tk.typable && !tk.end && tk.ch!=="\n" ? " auto":"");
-  el.textContent = tk.ch==="\n" ? "¶" : tk.ch;
+  const brk = tk.ch==="\n";
+  // ¶ のグリフ幅はフォント依存なので、半角英数と同じく全角1マスに固定して推定と揃える
+  el.className="cell" + (brk?" brk zen":zenCls(tk.ch)) + (tk.end?" end":"")
+              + (!tk.typable && !tk.end && !brk ? " auto":"");
+  el.textContent = brk ? "¶" : tk.ch;
   return el;
 }
 function buildWindow(center){
@@ -677,7 +712,8 @@ function commit(s){
     hintEl.classList.add("gone");
     // 1文字ずつ判定する。まとめて判定すると、1回の確定が照合窓(WIN)を
     // 超えたときにアンカーが進まず cursor が頭打ちになる。
-    for(const ch of s){ if(ch==="\n"||ch==="\r") continue; step(ch); reclassify(); maybeAnchor(); }
+    // 全角で打たれた英数記号は半角に寄せてから照合する（お手本も半角に統一済み）
+    for(const ch of normalizeInput(s)){ step(ch); reclassify(); maybeAnchor(); }
     commits++;
     log("COMMIT", s+" → cursor "+before+"→"+cursor);
   }
