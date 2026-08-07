@@ -2,9 +2,19 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="description" content="読書しながらタイピングできる練習サイト">
 <title>読書タイピング「yomikaki」</title>
+
+<!-- PWA。manifest / sw.js は相対パスなので GitHub Pages のサブパスでもそのまま動く -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#E7E9E0">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="yomikaki">
+<link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <style>
 :root{
   --paper:#E7E9E0;
@@ -17,6 +27,11 @@
   --gap:2;
   --fs:1.35rem;
   --tapeH:4.6rem;
+  /* ホーム画面から起動したときのノッチ／ホームインジケータ避け */
+  --safeT:env(safe-area-inset-top,0px);
+  --safeB:env(safe-area-inset-bottom,0px);
+  --safeL:env(safe-area-inset-left,0px);
+  --safeR:env(safe-area-inset-right,0px);
   --mincho:"Hiragino Mincho ProN","HiraMinProN-W3","Yu Mincho",YuMincho,"Noto Serif JP","Noto Serif CJK JP","Songti SC",serif;
   --util:ui-monospace,SFMono-Regular,Menlo,Consolas,"Courier New",monospace;
 }
@@ -34,7 +49,7 @@ body{
 .bar{
   position:fixed;top:0;left:0;right:0;z-index:5;
   display:flex;align-items:baseline;gap:1.5rem;flex-wrap:wrap;
-  padding:.85rem 1.1rem;
+  padding:calc(.85rem + var(--safeT)) calc(1.1rem + var(--safeR)) .85rem calc(1.1rem + var(--safeL));
   border-bottom:1px solid var(--rule-soft);
   background:linear-gradient(var(--paper) 70%,rgba(231,233,224,0));
 }
@@ -62,8 +77,8 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
 /* ── 入力欄 ───────────────────────────── */
 .stage{
   position:fixed;left:0;right:0;
-  bottom:calc(var(--tapeH) + var(--gap) * var(--fs) * 1.9);
-  padding:0 1.1rem;
+  bottom:calc(var(--tapeH) + var(--safeB) + var(--gap) * var(--fs) * 1.9);
+  padding:0 calc(1.1rem + var(--safeR)) 0 calc(1.1rem + var(--safeL));
   transition:bottom .2s ease;
 }
 .scroll{
@@ -97,14 +112,14 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
 
 /* ── お手本テープ ─────────────────────── */
 .tapewrap{
-  position:fixed;left:0;right:0;bottom:0;height:var(--tapeH);z-index:4;
+  position:fixed;left:0;right:0;bottom:0;height:calc(var(--tapeH) + var(--safeB));z-index:4;
   overflow:hidden;
   background:var(--panel);
   border-top:1px solid var(--rule);
   box-shadow:0 -1px 0 var(--panel),0 -6px 18px rgba(23,26,21,.06);
 }
 .tape{
-  position:absolute;left:0;bottom:.95rem;
+  position:absolute;left:0;bottom:calc(.95rem + var(--safeB));
   white-space:nowrap;
   font-size:var(--fs);
   line-height:1;
@@ -131,7 +146,7 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
   color:var(--rule);letter-spacing:.02em;padding-bottom:.25em;
 }
 .tapecaret{
-  position:absolute;bottom:0;width:1px;height:calc(var(--tapeH) - 1.35rem);
+  position:absolute;bottom:var(--safeB);width:1px;height:calc(var(--tapeH) - 1.35rem);
   background:var(--shu);
   transition:left .18s cubic-bezier(.22,.7,.3,1);
 }
@@ -184,9 +199,9 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
 
 @media (max-width:600px){
   :root{--fs:1.1rem;--tapeH:4rem}
-  .bar{gap:.7rem;padding:.6rem .7rem}
+  .bar{gap:.7rem;padding:calc(.6rem + var(--safeT)) calc(.7rem + var(--safeR)) .6rem calc(.7rem + var(--safeL))}
   .stats{gap:.7rem;width:100%;margin-left:0}
-  .stage{padding:0 .7rem}
+  .stage{padding:0 calc(.7rem + var(--safeR)) 0 calc(.7rem + var(--safeL))}
 }
 @media (prefers-reduced-motion:reduce){
   .tape,.tapecaret,.stage{transition:none}
@@ -210,6 +225,7 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
     <span style="margin-left:.4rem">ギャップ</span>
     <button data-gap="0">0</button><button data-gap="1">1</button>
     <button data-gap="2" aria-pressed="true">2</button><button data-gap="3">3</button>
+    <button id="install" hidden style="margin-left:.5rem">ホーム画面へ</button>
     <button id="reset" style="margin-left:.5rem">最初から</button>
     <button id="logbtn">ログ</button>
     <button id="logcopy">コピー</button>
@@ -406,6 +422,7 @@ function renderRange(a,b,em,tail){
    ═══════════════════════════════════════════════════ */
 const editor=$("editor"), frozenEl=$("frozen"), liveEl=$("live"), composeEl=$("compose");
 const scrollEl=$("scroll"), hintEl=$("hint");
+const HINT=hintEl.textContent;      // インストール案内で差し替えるので初期文言を控えておく
 let frozenUpto=0, emFrozen=0, lastLiveHTML=null;
 function $(id){ return document.getElementById(id); }
 function renderEditor(){
@@ -729,7 +746,7 @@ function start(){
   frozenUpto=0; emFrozen=0; lastLiveHTML=null;
   frozenEl.innerHTML=""; liveEl.innerHTML=""; composeEl.textContent=ZWSP;
   winStart=-1; winEnd=-1; tokenW=new Float64Array(tokens.length);
-  hintEl.classList.remove("gone");
+  hintEl.textContent=HINT; hintEl.classList.remove("gone");
   $("wTitle").textContent=WORK.title; $("wAuthor").textContent=WORK.author;
   measureProbes();
   renderEditor(); editor.focus(); placeCaret();
@@ -852,6 +869,44 @@ $("pkPasteGo").addEventListener("click", ()=>{
   const t=$("pkPaste").value;
   if(t.trim().length<20){ dlgStatus.textContent="本文を貼り付けてください"; return; }
   grab(async()=>({title:$("pkTitle").value.trim()||"貼り付けテキスト", author:"", kana:"不明", text:t}));
+});
+
+/* ═══════════════════════════════════════════════════
+   10. PWA（ホーム画面へのインストール）
+   ═══════════════════════════════════════════════════ */
+// file:// で開いたときは Service Worker を登録できない。単一HTMLのまま動く前提を壊さないよう黙って諦める。
+if(navigator.serviceWorker && location.protocol.startsWith("http")){
+  addEventListener("load", ()=>{
+    navigator.serviceWorker.register("sw.js", {scope:"./"}).catch(err=>log("swError", err.message));
+  });
+}
+
+const installBtn=$("install");
+const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone===true;
+let installPrompt=null;
+
+// Chromium 系：インストール可能になった時点でボタンを出す
+addEventListener("beforeinstallprompt", e=>{
+  e.preventDefault(); installPrompt=e;
+  if(!standalone) installBtn.hidden=false;
+});
+addEventListener("appinstalled", ()=>{ installPrompt=null; installBtn.hidden=true; });
+
+// iOS Safari は beforeinstallprompt を持たない。navigator.standalone の有無で判別して手動追加を案内する。
+if(!standalone && "standalone" in navigator) installBtn.hidden=false;
+
+installBtn.addEventListener("click", async ()=>{
+  if(installPrompt){
+    const p=installPrompt; installPrompt=null;
+    p.prompt();
+    const {outcome}=await p.userChoice;
+    log("install", outcome);
+    if(outcome==="accepted") installBtn.hidden=true;
+  }else{
+    hintEl.textContent="共有ボタン → 「ホーム画面に追加」でインストールできます。";
+    hintEl.classList.remove("gone");
+  }
+  editor.focus(); placeCaret();
 });
 
 if(document.fonts && document.fonts.ready) document.fonts.ready.then(()=>{ measureProbes(); winStart=-1; updateTape(); });
