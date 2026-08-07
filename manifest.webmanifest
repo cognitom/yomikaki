@@ -1,0 +1,20 @@
+{
+  "id": "./",
+  "name": "読書タイピング「yomikaki」",
+  "short_name": "yomikaki",
+  "description": "小説を読みながら、かな入力と漢字変換を練習する特殊テキストエディタ",
+  "lang": "ja",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#E7E9E0",
+  "theme_color": "#E7E9E0",
+  "categories": ["education", "productivity"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

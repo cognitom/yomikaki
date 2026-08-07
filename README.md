@@ -22,6 +22,19 @@
 GitHub Pages に置く場合は Settings → Pages で `main` ブランチのルートを指定する
 （`.github/workflows/pages.yml` を使う場合は Source を GitHub Actions にする）。
 
+### ホーム画面にインストール（PWA）
+
+HTTPS で開くと PWA として動く。
+
+- Android / デスクトップ Chrome — ヘッダの「ホーム画面へ」ボタン、またはブラウザのインストール導線から
+- iOS Safari — 共有ボタン →「ホーム画面に追加」（同じボタンが案内を出す）
+
+インストール後はアドレスバーなしで起動し、ノッチやホームインジケータを避けて
+表示される。Service Worker が `index.html` とアイコンを先読みするので
+オフラインでも起動でき、収録サンプルはそのまま打てる（青空文庫の取得だけは通信が要る）。
+
+`file://` で開いた場合は Service Worker を登録しない。単一 HTML としての動作は変わらない。
+
 ### 作品の読み込み
 
 「作品」ボタンから3つの経路がある。
@@ -51,6 +64,10 @@ node --test "test/*.test.mjs"
 ```
 
 `index.html` は単一ファイルを維持している（アーティファクト等でそのまま動かせるため）。
+PWA 用の `manifest.webmanifest` / `sw.js` / `icons/` だけが外にある。
+これらのパスはすべて相対で書くこと（GitHub Pages のサブパス配信で壊れるため）。
+`test/pwa.test.mjs` がこの規則とアイコンの実寸を機械的に検査する。
+
 テストは `//#region testable` 〜 `//#endregion testable` の範囲を抜き出して実行する。
 この領域には DOM に依存しない純粋なロジック（記法パーサ・判定エンジン・描画用純粋関数）だけを置くこと。
 
