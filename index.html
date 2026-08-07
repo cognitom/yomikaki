@@ -316,12 +316,62 @@ function normalizeInput(s){ return toHalf(s).replace(/[\n\r]/g,""); }
    不自然になる）。同じフォント・同じサイズ・letter-spacing:normal なので字送りは一致する。 */
 const ASCII_VIS = /[\x21-\x7E]/;
 
+/* ── 入力スキップの規則（issue #3）──
+   お手本には「読んで進みたいが打ちたくないもの」と「そもそも本文でないもの」が混じる。
+   前者は自動入力（typable:false）にして本文には残し、後者は原文から丸ごと落とす。
+
+   3つのリストで表す。増やすときはリストに1行足すだけでよい。
+
+   | リスト        | 単位 | 扱い                                       |
+   |---------------|------|--------------------------------------------|
+   | `NOISE_LINES` | 行   | 行ごと削除。テープにも入力欄にも出ない     |
+   | `AUTO_LINES`  | 行   | 行全体を自動入力。テープには薄く残る       |
+   | `AUTO_CHARS`  | 文字 | その文字だけ自動入力。文中に現れても効く   |
+
+   リストは完全である必要はない。取りこぼしは「打つ対象として残る」だけなので、
+   誤って本文を消す方向には転ばない。迷ったら NOISE ではなく AUTO に入れること。 */
+const NOISE_LINES = [
+  /^[ 　]*(?:挿絵|さし絵|插絵|口絵|図版?|写真)[０-９0-9]*[ 　]*$/,  // img の alt が残ったもの
+  /^[ 　]*〓+[ 　]*$/,                                              // 置換できなかった外字だけの行
+];
+const AUTO_LINES = [
+  // 第一章 / 第2章　出発。副題は空白で区切られたものだけ拾う。
+  // 区切りなしまで許すと「第一部が完成した。」のような本文まで見出しに化ける。
+  /^[ 　]*第[〇零一二三四五六七八九十百千壱弐参拾0-9０-９]+[章節編篇部巻回話幕](?:[ 　]+.{0,16})?[ 　]*$/,
+  /^[ 　]*[〇零一二三四五六七八九十百]{1,4}[ 　]*$/,                // 漢数字だけの見出し行
+  /^[ 　]*[0-9０-９]{1,3}[ 　]*$/,                                  // 数字だけの見出し行
+  /^[ 　]*(?:序|序章|序文|序詞|緒言|凡例|前書き?|まえがき|はしがき|後書き?|あとがき|跋|跋文|終章|結び|幕間|間奏|閑話休題|プロローグ|エピローグ)[ 　]*$/,
+  /^[ 　]*[-－―ー─＝=＊*※†‡・]{3,}[ 　]*$/,                       // ＊＊＊ のような場面転換の飾り
+];
+const AUTO_CHARS = /[‡†§¶‖※〓＊*◆◇■□▲△▼▽★☆♪♭♯]/;   // 単独では打ちようのない記号
+
+/* 原文にスキップ規則を掛け、整形後のテキストと「自動入力にする位置」の対を返す。
+   auto[i] は整形後テキストの i 文字目が自動入力かどうか。トークン化はこの対で行う。 */
+function applySkips(src){
+  const text = src.split("\n")
+                  .filter(l => !NOISE_LINES.some(re => re.test(l)))
+                  .join("\n")
+                  .replace(/\n{3,}/g,"\n\n")   // ノイズ行を抜いた跡の空行をまとめる
+                  .trim();
+  const auto = new Uint8Array(text.length);
+  let at = 0;
+  for(const line of text.split("\n")){
+    const whole = line !== "" && AUTO_LINES.some(re => re.test(line));
+    for(let k=0;k<line.length;k++) if(whole || AUTO_CHARS.test(line[k])) auto[at+k]=1;
+    at += line.length + 1;                     // 改行ぶん
+  }
+  return {text, auto};
+}
+
 function parseAozora(src){
   src = src.replace(/^-{10,}[\s\S]*?-{10,}\n/,"")      // 冒頭の凡例ブロック
            .replace(/\n底本：[\s\S]*$/,"")              // 底本以降
            .replace(/※［＃[^］]*?U\+([0-9A-Fa-f]{4,5})[^］]*］/g,(m,h)=>String.fromCodePoint(parseInt(h,16)))
            .replace(/［＃[^］]*］/g,"")                  // 注記
            .replace(/\r\n?/g,"\n").trim();
+
+  // 入力スキップの規則は記法を解いた後に掛ける（［＃…］が残ったままだと行の判定が狂う）
+  const skip = applySkips(src); src = skip.text;
 
   const tokens=[]; let forced=-1;
   for(let i=0;i<src.length;i++){
@@ -338,7 +388,7 @@ function parseAozora(src){
       continue;
     }
     // 半角化は記法（｜《》［＃…］）を解いた後。先に掛けると区切り文字そのものが壊れる
-    tokens.push({ch:toHalf(c), typable:c!=="\n" && !(c==="　" && (tokens.length===0||tokens[tokens.length-1].ch==="\n"))});
+    tokens.push({ch:toHalf(c), typable:!skip.auto[i] && c!=="\n" && !(c==="　" && (tokens.length===0||tokens[tokens.length-1].ch==="\n"))});
   }
   tokens.push({ch:"了", typable:false, end:true});
 

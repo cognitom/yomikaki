@@ -14,7 +14,8 @@ export async function loadCore() {
 
   const src = m[1] + `
 export { SAMPLE, parseAozora, setDoc, engineReset, step, reclassify, maybeAnchor,
-         esc, autoHTML, renderRange, toHalf, normalizeInput };
+         esc, autoHTML, renderRange, toHalf, normalizeInput,
+         applySkips, NOISE_LINES, AUTO_LINES, AUTO_CHARS };
 export const state = {
   get tokens(){return tokens}, get target(){return target},
   get pre(){return pre}, get tokenOfTarget(){return tokenOfTarget},

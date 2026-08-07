@@ -106,6 +106,32 @@ test("お手本と入力が同じ半角化関数を通る", () => {
   assert.match(js, /function normalizeInput\(s\)\{ return toHalf\(s\)/);
 });
 
+// ── 入力スキップの対象（issue #3）──
+
+test("スキップ規則はリストで持つ", () => {
+  // 規則を条件式に散らすと追加できなくなる。3つのリストに閉じ込めておく。
+  for (const name of ["NOISE_LINES", "AUTO_LINES"]) {
+    assert.match(js, new RegExp(`const ${name} = \\[`), name);
+  }
+  // 文字単位の判定は同じ正規表現を何度も test() するので /g だと lastIndex で取りこぼす
+  assert.match(js, /const AUTO_CHARS = \/\[[^\]]*\]\/;/);
+});
+
+test("スキップ規則は整形後テキストと同じ添字で参照する", () => {
+  // applySkips が返す auto[] は「ノイズ行を抜いた後」の添字。src を差し替えてから
+  // 走査しないと、抜けた行の分だけずれて無関係な文字が自動入力になる。
+  const parse = js.match(/function parseAozora\(src\)\{([\s\S]*?)\n\}/)[1];
+  const head = parse.slice(0, parse.indexOf("const tokens=[]"));
+  assert.match(head, /const skip = applySkips\(src\); src = skip\.text;/);
+  assert.match(parse, /typable:!skip\.auto\[i\]/);
+});
+
+test("スキップ規則は注記を除いた後に掛ける", () => {
+  // ［＃…］が行に残っていると行全体の照合が効かず、見出しを拾えない
+  const parse = js.match(/function parseAozora\(src\)\{([\s\S]*?)\n\}/)[1];
+  assert.ok(parse.indexOf("［＃[^］]*］") < parse.indexOf("applySkips(src)"));
+});
+
 test("全角スペースは半角化の対象外", () => {
   // U+3000 を半角化すると、行頭の字下げが自動入力の対象から外れて境界が壊れる
   const re = js.match(/const ZENKAKU = (\/.*?\/g);/)[1];
