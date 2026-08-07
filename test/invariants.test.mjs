@@ -118,10 +118,29 @@ test("テープは上下とも同じ罫線で閉じる", () => {
 test("入力欄の下端は --tapeBand を基準に置く", () => {
   // テープの高さ・余白・セーフエリアを個別に足すと、余白を変えたときに
   // 入力欄がテープへ潜り込む。合計を1つの変数に閉じ込めて参照する。
-  assert.match(css, /--tapeBand:calc\(var\(--tapeH\) \+ var\(--tapeGapB\) \+ var\(--safeB\) \+ 2px\)/);
+  assert.match(css, /--tapeBand:calc\(var\(--tapeH\) \+ var\(--tapeGapB\) \+ var\(--safeB\)\)/);
   const stage = css.match(/\.stage\{[\s\S]*?\}/)[0];
   assert.match(stage, /bottom:calc\(var\(--tapeBand\)/);
   assert.ok(!/--tapeH|--safeB/.test(stage), "個別の値を直接足さない");
+});
+
+test("テープの高さは積み上げて導出する", () => {
+  // 固定値で持つと --fs を変えたとき、文字の下とルビの上の余白が食い違う。
+  // 下から順に「余白・文字・ルビ・余白」と積むことで上下が等しくなる。
+  assert.match(css, /--tapeRuby:calc\(var\(--fs\) \* \.475\)/);
+  assert.match(css, /--tapeH:calc\(var\(--tapePadB\) \* 2 \+ var\(--fs\) \+ var\(--tapeRuby\) \+ 2px\)/);
+  // 導出された値をメディアクエリで上書きすると、その画面幅だけ均衡が崩れる
+  const mq = css.match(/@media \(max-width:600px\)\{[\s\S]*?\n\}/)[0];
+  assert.ok(!/--tapeH:|--tapeRuby:/.test(mq), "--tapeH / --tapeRuby は上書きしない");
+});
+
+test("マーカーは文字を中心に対称に置く", () => {
+  // 上下のはみ出しが違うと、1文字ぶんの高さしかない字に対して位置がずれて見える。
+  const car = css.match(/\.tapecaret\{[\s\S]*?\}/)[0];
+  assert.match(car, /bottom:calc\(var\(--tapePadB\) - var\(--tapeCaretPad\)\)/);
+  assert.match(car, /height:calc\(var\(--fs\) \+ var\(--tapeCaretPad\) \* 2\)/);
+  // はみ出し量が rem 固定だと、--fs を下げたとき相対的に長くなりすぎる
+  assert.match(css, /--tapeCaretPad:calc\(var\(--fs\) \* \.33\)/);
 });
 
 // ── 入力スキップの対象（issue #3）──
