@@ -27,15 +27,14 @@
   --gap:2;
   --fs:1.35rem;
   /* ── テープの縦の寸法 ──
-     テープの中身は「文字」と、その上に張り出す「ルビ」の2段。高さを固定値で持つと
-     字の大きさを変えたとき上下の余白が食い違うので、--tapeH は積み上げて導出する。 */
-  /* ルビの張り出し。.rt は font-size:.38em / line-height:1 / padding-bottom:.25em
-     なので、字の大きさの .38 × 1.25 = .475 倍になる。.rt を触ったらここも直すこと。 */
-  --tapeRuby:calc(var(--fs) * .475);
-  --tapePadB:1.15rem;      /* 文字の下の余白。ルビの上にも同じだけ取る */
+     縦位置は文字だけで決める。ルビは数えない。ルビは全文字に付くものではないので、
+     ルビぶんの高さを積むと、ルビのない行では文字が下に寄って見える。
+     ルビは上側の余白へはみ出させる（--tapePadB が受け皿になる）。 */
+  --tapePadB:1.15rem;      /* 文字の上下に取る余白。ルビはこの中に収まる */
   --tapeGapB:.55rem;       /* 外側の余白。下罫線から画面下端まで */
-  /* テープの外形。上下 1px の罫線を含む（.tapewrap は border-box） */
-  --tapeH:calc(var(--tapePadB) * 2 + var(--fs) + var(--tapeRuby) + 2px);
+  /* テープの外形。上下 1px の罫線を含む（.tapewrap は border-box）。
+     この積み方により、文字が罫線のあいだの中央に来る。 */
+  --tapeH:calc(var(--tapePadB) * 2 + var(--fs) + 2px);
   /* テープが画面下端から占める高さ。入力欄の位置決めはこれを基準にする */
   --tapeBand:calc(var(--tapeH) + var(--tapeGapB) + var(--safeB));
   /* マーカーが文字から上下にはみ出す量。文字を中心に対称にする。
@@ -135,7 +134,7 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
 /* ── お手本テープ ─────────────────────── */
 /* テープは画面下端に貼り付けず、--tapeGapB + セーフエリアぶん浮かせる。
    上下を同じ罫線で閉じることで、原稿用紙を切り出した一片として見せる。
-   高さは --tapeH の導出により、文字の下とルビの上に同じ余白が空く。 */
+   高さは --tapeH の導出により、文字の上下に同じ余白が空く。 */
 .tapewrap{
   position:fixed;left:0;right:0;
   bottom:calc(var(--tapeGapB) + var(--safeB));
@@ -232,7 +231,7 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
 #logbox:focus{outline:2px solid var(--rule);outline-offset:-2px}
 
 @media (max-width:600px){
-  /* --tapeH と --tapeRuby は --fs / --tapePadB から導出されるので指定しない */
+  /* --tapeH は --fs / --tapePadB から導出されるので指定しない */
   :root{--fs:1.1rem;--tapePadB:.95rem;--tapeGapB:.8rem}
   .bar{gap:.7rem;padding:calc(.6rem + var(--safeT)) calc(.7rem + var(--safeR)) .6rem calc(.7rem + var(--safeL))}
   .stats{gap:.7rem;width:100%;margin-left:0}

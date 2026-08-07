@@ -124,14 +124,39 @@ test("入力欄の下端は --tapeBand を基準に置く", () => {
   assert.ok(!/--tapeH|--safeB/.test(stage), "個別の値を直接足さない");
 });
 
-test("テープの高さは積み上げて導出する", () => {
-  // 固定値で持つと --fs を変えたとき、文字の下とルビの上の余白が食い違う。
-  // 下から順に「余白・文字・ルビ・余白」と積むことで上下が等しくなる。
-  assert.match(css, /--tapeRuby:calc\(var\(--fs\) \* \.475\)/);
-  assert.match(css, /--tapeH:calc\(var\(--tapePadB\) \* 2 \+ var\(--fs\) \+ var\(--tapeRuby\) \+ 2px\)/);
-  // 導出された値をメディアクエリで上書きすると、その画面幅だけ均衡が崩れる
+test("テープの高さは文字だけから導出する", () => {
+  // 固定値で持つと --fs を変えたとき上下の余白が食い違う。
+  // 「余白・文字・余白」と積むことで、文字が罫線のあいだの中央に来る。
+  assert.match(css, /--tapeH:calc\(var\(--tapePadB\) \* 2 \+ var\(--fs\) \+ 2px\)/);
+  // ルビは高さに数えない。全文字に付くものではないので、ルビぶんを積むと
+  // ルビのない行では文字が下に寄って見える。
+  assert.doesNotMatch(css, /--tapeH:[^;]*ruby/i);
+  // 導出値をメディアクエリで上書きすると、その画面幅だけ均衡が崩れる
   const mq = css.match(/@media \(max-width:600px\)\{[\s\S]*?\n\}/)[0];
-  assert.ok(!/--tapeH:|--tapeRuby:/.test(mq), "--tapeH / --tapeRuby は上書きしない");
+  assert.ok(!/--tapeH:/.test(mq), "--tapeH は上書きしない");
+});
+
+test("ルビが上の余白に収まる", () => {
+  // 縦位置は文字だけで決め、ルビは上の余白へはみ出させている。
+  // --tapePadB がルビの高さを下回ると .tapewrap の overflow:hidden で頭が切れる。
+  const rt = css.match(/\.rt\{[\s\S]*?\}/)[0];
+  assert.match(rt, /font-size:\.38em/);
+  assert.match(rt, /padding-bottom:\.25em/);
+  const rubyRatio = 0.38 * 1.25;            // line-height:1 なので font-size + padding だけ
+
+  const vars = block => ({
+    fs:  (block.match(/--fs:([\d.]+)rem/)  || [])[1],
+    pad: (block.match(/--tapePadB:([\d.]+)rem/) || [])[1],
+  });
+  const root = vars(css.match(/^:root\{[\s\S]*?\n\}/m)[0]);
+  const mq   = vars(css.match(/@media \(max-width:600px\)\{[\s\S]*?\n\}/)[0].match(/:root\{[^}]*\}/)[0]);
+
+  for (const [name, v] of [["既定", root], ["〜600px", { ...root, ...clean(mq) }]]) {
+    const fs = parseFloat(v.fs), pad = parseFloat(v.pad);
+    assert.ok(pad >= fs * rubyRatio,
+      `${name}: --tapePadB ${pad}rem がルビの高さ ${(fs * rubyRatio).toFixed(3)}rem 未満`);
+  }
+  function clean(o){ return Object.fromEntries(Object.entries(o).filter(([, x]) => x)); }
 });
 
 test("マーカーは文字を中心に対称に置く", () => {
