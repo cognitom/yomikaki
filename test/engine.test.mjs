@@ -189,6 +189,70 @@ test("スキップした見出しを打たずに先へ進める", () => {
   C.setDoc(C.SAMPLE);
 });
 
+// ── 類似記号の統一（issue #4） ──
+
+// テキストを打ち込んで、全文が ok になったかを返す
+function typeAll(text, input) {
+  C.setDoc({ title: "t", author: "", text });
+  C.engineReset();
+  for (const ch of C.normalizeInput(input)) { C.step(ch); C.reclassify(); C.maybeAnchor(); }
+  const r = { cursor: C.state.cursor, allOk: C.state.typed.every(t => t.cls === "ok"),
+              shown: C.state.typed.map(t => t.ch).join("") };
+  C.setDoc(C.SAMPLE);
+  return r;
+}
+
+test("字形の近い記号はどちらで打っても正解になる", () => {
+  for (const [tape, typed] of [["あ―い", "あ—い"], ["あ―い", "あ─い"], ["あ…い", "あ⋯い"],
+                               ["あ…い", "あ‥い"], ["あ○い", "あ〇い"], ["あ○い", "あ◯い"],
+                               ["あ・い", "あ･い"], ["あ〜い", "あ~い"], ["It's", "It’s"]]) {
+    const r = typeAll(tape, typed);
+    assert.ok(r.allOk, `お手本 ${tape} に対して ${typed} が ng になった`);
+    assert.equal(r.cursor, [...tape].length);
+  }
+});
+
+test("統一は判定だけで、表示は打った字のまま残す", () => {
+  const r = typeAll("あ○い", "あ〇い");
+  assert.equal(r.shown, "あ〇い", "入力欄で ○ に化けてはいけない");
+  // お手本側も原文のまま。テープに出るのは target であって targetKey ではない
+  C.setDoc({ title: "t", author: "", text: "あ〇い" });
+  assert.equal(C.state.target, "あ〇い");
+  assert.equal(C.state.targetKey, "あ○い");
+  C.setDoc(C.SAMPLE);
+});
+
+test("長音符は横棒に寄せない（コーヒーが壊れる）", () => {
+  assert.equal(C.unify("ー"), "ー");
+  assert.notEqual(C.unify("―"), "ー");
+  assert.ok(!typeAll("コーヒー", "コ―ヒ―").allOk, "長音符とダーシは打ち分ける字");
+});
+
+test("統一しても判定用キーの長さは原文と一致する", () => {
+  const chars = C.SIMILAR_GROUPS.flatMap(([to, from]) => [to, ...from]);
+  for (const c of chars) assert.equal(C.unify(c).length, c.length, `1文字→1文字でない: ${c}`);
+  const src = chars.join("") + "吾輩は猫である。";
+  assert.equal(C.unifyAll(src).length, src.length);
+});
+
+test("統一の対象外はそのまま通す", () => {
+  for (const c of ["あ", "国", "　", " ", "A", "1", "。", "「", "ー"]) assert.equal(C.unify(c), c);
+});
+
+test("統一の規則は代表字と寄せる字の組で持つ", () => {
+  assert.ok(Array.isArray(C.SIMILAR_GROUPS));
+  const seen = new Map();
+  for (const [to, from] of C.SIMILAR_GROUPS) {
+    assert.equal(typeof to, "string");
+    for (const c of from) {
+      assert.ok(!seen.has(c), `${c} が複数の組に入っている（寄せ先が定まらない）`);
+      seen.set(c, to);
+    }
+  }
+  // 代表字自身が別の組の変換対象になっていると、寄せ先が2段になって定まらない
+  for (const [to] of C.SIMILAR_GROUPS) assert.ok(!seen.has(to), `代表字 ${to} が寄せられている`);
+});
+
 // ── ファズ：ランダムな変換単位と誤入力で、自動挿入位置が常に正しいこと ──
 function truth(p, pre, T) {
   let s = "";

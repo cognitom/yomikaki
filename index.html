@@ -345,6 +345,35 @@ const AUTO_LINES = [
 ];
 const AUTO_CHARS = /[‡†§¶‖※〓＊*◆◇■□▲△▼▽★☆♪♭♯]/;   // 単独では打ちようのない記号
 
+/* ── 類似記号の統一（issue #4）──
+   字形が近く、読んでいる字の大きさでは区別のつかない記号がある。IME も「まる」と打てば
+   〇 ○ ◯ を並べて出すので、原文がどれなのかは打つ側には分からない。これらは
+   お手本と入力の双方を同じ字に寄せてから照合する。
+
+   半角化（issue #2）と違い、**表示は原文のまま**にする。〇 と ○ の書き分けは原文の
+   情報であって、こちらで潰してよいものではない。寄せるのは判定用のキー（`targetKey`
+   と `typed[].key`）だけで、テープにも入力欄にも打った字がそのまま残る。
+
+   `[代表字, 寄せる字…]` の並び。行を足せば増やせる。最初から完全である必要はない。
+   ただし **1文字→1文字に限る**こと。`target` と `targetKey` の長さがずれると
+   `cursor` が別の字を指す。 */
+const SIMILAR_GROUPS = [
+  ["―", "‒–—─━"],   // ダッシュ・横棒。長音符 ー(U+30FC) は別の字なので絶対に入れない
+  ["-", "‐‑−﹣"],    // ハイフン・マイナス
+  ["…", "⋯‥"],      // 三点リーダ。二点リーダも点を数えないと見分けられない
+  ["○", "〇◯◦∘"],   // マル
+  ["・", "･·•"],     // 中黒
+  ["~", "〜∼"],      // 波ダッシュ（全角チルダ ～ は半角化で既に ~ になっている）
+  ["'", "‘’‛′"],    // アポストロフィ
+  ['"', "“”‟″"],    // 引用符
+];
+const SIMILAR = new Map();
+for(const [to,from] of SIMILAR_GROUPS) for(const c of from) SIMILAR.set(c,to);
+// 1文字を代表字に寄せる。判定用キーを作る唯一の入口。
+function unify(c){ return SIMILAR.get(c) || c; }
+// 文字列を判定用キーにする。すべて1文字→1文字なので長さは必ず元と一致する。
+function unifyAll(s){ let o=""; for(const c of s) o+=unify(c); return o; }
+
 /* 原文にスキップ規則を掛け、整形後のテキストと「自動入力にする位置」の対を返す。
    auto[i] は整形後テキストの i 文字目が自動入力かどうか。トークン化はこの対で行う。 */
 function applySkips(src){
@@ -400,7 +429,8 @@ function parseAozora(src){
     else if(!tk.end){ buf+=tk.ch; }
   }
   pre[target.length]=buf; tokenOfTarget[target.length]=tokens.length-1;
-  return {tokens,target,pre,tokenOfTarget};
+  // 照合は targetKey に対して行う。target は表示・字送り用に原文のまま残す
+  return {tokens,target,targetKey:unifyAll(target),pre,tokenOfTarget};
 
   function rubyBase(tk){
     let j=tk.length-1; if(j<0) return -1;
@@ -412,11 +442,11 @@ function parseAozora(src){
 }
 
 let WORK = SAMPLE;
-let tokens=[], target="", pre=[], tokenOfTarget=[];
+let tokens=[], target="", targetKey="", pre=[], tokenOfTarget=[];
 function setDoc(w){                 // 純粋：文書状態だけを差し替える
   WORK = w;
   const d = parseAozora(w.text);
-  tokens=d.tokens; target=d.target; pre=d.pre; tokenOfTarget=d.tokenOfTarget;
+  tokens=d.tokens; target=d.target; targetKey=d.targetKey; pre=d.pre; tokenOfTarget=d.tokenOfTarget;
 }
 
 /* ═══════════════════════════════════════════════════
@@ -433,17 +463,20 @@ function engineReset(){
   resetDP();
 }
 function resetDP(){
-  Mloc = target.slice(anchorT, anchorT+WIN);
+  // 照合窓は判定用キーから切り出す（類似記号はここで既に代表字へ寄っている）
+  Mloc = targetKey.slice(anchorT, anchorT+WIN);
   const r0=new Int32Array(Mloc.length+1);
   for(let j=0;j<=Mloc.length;j++) r0[j]=j;
   rows=[r0];
 }
 function step(ch){
-  typed.push({ch, cls:"ng", c:-1});
+  // ch は表示用（打った字そのまま）、key は判定用（類似記号を代表字に寄せたもの）
+  const key=unify(ch);
+  typed.push({ch, key, cls:"ng", c:-1});
   const L=Mloc.length, prev=rows[rows.length-1], cur=new Int32Array(L+1);
   cur[0]=prev[0]+1;
   for(let j=1;j<=L;j++){
-    const sub=prev[j-1]+(ch===Mloc[j-1]?0:1);
+    const sub=prev[j-1]+(key===Mloc[j-1]?0:1);
     cur[j]=Math.min(prev[j]+1, cur[j-1]+1, sub);
   }
   rows.push(cur);
@@ -456,7 +489,7 @@ function reclassify(){
 
   let i=rows.length-1, j=best, guard=0;
   while(i>0 && guard++<100000){
-    const it=typed[anchorK+i-1], eq = j>0 && it.ch===Mloc[j-1];
+    const it=typed[anchorK+i-1], eq = j>0 && it.key===Mloc[j-1];
     if(j>0 && rows[i][j]===rows[i-1][j-1]+(eq?0:1)){
       it.cls = eq?"ok":"ng"; it.c = anchorT+j-1; i--; j--;
     }else if(rows[i][j]===rows[i-1][j]+1){
