@@ -106,6 +106,24 @@ test("お手本と入力が同じ半角化関数を通る", () => {
   assert.match(js, /function normalizeInput\(s\)\{ return toHalf\(s\)/);
 });
 
+// ── テープの余白（issue #5）──
+
+test("テープは上下とも同じ罫線で閉じる", () => {
+  const wrap = css.match(/\.tapewrap\{[\s\S]*?\}/)[0];
+  const top = wrap.match(/border-top:([^;]+);/)[1];
+  const bottom = wrap.match(/border-bottom:([^;]+);/)[1];
+  assert.equal(top, bottom, "下罫線は上罫線と同じ指定にする");
+});
+
+test("入力欄の下端は --tapeBand を基準に置く", () => {
+  // テープの高さ・余白・セーフエリアを個別に足すと、余白を変えたときに
+  // 入力欄がテープへ潜り込む。合計を1つの変数に閉じ込めて参照する。
+  assert.match(css, /--tapeBand:calc\(var\(--tapeH\) \+ var\(--tapeGapB\) \+ var\(--safeB\) \+ 2px\)/);
+  const stage = css.match(/\.stage\{[\s\S]*?\}/)[0];
+  assert.match(stage, /bottom:calc\(var\(--tapeBand\)/);
+  assert.ok(!/--tapeH|--safeB/.test(stage), "個別の値を直接足さない");
+});
+
 test("全角スペースは半角化の対象外", () => {
   // U+3000 を半角化すると、行頭の字下げが自動入力の対象から外れて境界が壊れる
   const re = js.match(/const ZENKAKU = (\/.*?\/g);/)[1];
