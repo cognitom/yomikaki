@@ -77,4 +77,7 @@ PWA 用の `manifest.webmanifest` / `sw.js` / `icons/` だけが外にある。
 
 ## ドキュメント
 
-- [`docs/仕様書.md`](docs/仕様書.md) — 設計の全体像と、実機検証で判明した IME の制約
+- [`docs/仕様書.md`](docs/仕様書.md) — 設計の全体像と「なぜそう決めたか」
+- [`docs/テープ.md`](docs/テープ.md) — お手本テープの余白・字送り・位置合わせ・仮想化
+- [`docs/IME.md`](docs/IME.md) — contenteditable と IME 捕捉、実機検証で判明した制約
+- [`docs/PWA.md`](docs/PWA.md) — ホーム画面インストールと Service Worker
