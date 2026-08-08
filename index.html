@@ -26,7 +26,20 @@
   --mute:#99A093;
   --gap:2;
   --fs:1.35rem;
-  --tapeH:4.6rem;
+  /* ── テープの縦の寸法 ──
+     縦位置は文字だけで決める。ルビは数えない。ルビは全文字に付くものではないので、
+     ルビぶんの高さを積むと、ルビのない行では文字が下に寄って見える。
+     ルビは上側の余白へはみ出させる（--tapePadB が受け皿になる）。 */
+  --tapePadB:1.15rem;      /* 文字の上下に取る余白。ルビはこの中に収まる */
+  --tapeGapB:.55rem;       /* 外側の余白。下罫線から画面下端まで */
+  /* テープの外形。上下 1px の罫線を含む（.tapewrap は border-box）。
+     この積み方により、文字が罫線のあいだの中央に来る。 */
+  --tapeH:calc(var(--tapePadB) * 2 + var(--fs) + 2px);
+  /* テープが画面下端から占める高さ。入力欄の位置決めはこれを基準にする */
+  --tapeBand:calc(var(--tapeH) + var(--tapeGapB) + var(--safeB));
+  /* マーカーが文字から上下にはみ出す量。文字を中心に対称にする。
+     字の大きさに比例させないと、--fs を下げたとき相対的に長くなりすぎる。 */
+  --tapeCaretPad:calc(var(--fs) * .33);
   /* 半角スペースはそのままだと狭くてテープ上で判別しにくい。
      入力欄・テープ・実測用プローブの3つすべてに同じ値を掛けること（字送りの一致）。 */
   --wordsp:.25em;
@@ -80,7 +93,7 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
 /* ── 入力欄 ───────────────────────────── */
 .stage{
   position:fixed;left:0;right:0;
-  bottom:calc(var(--tapeH) + var(--safeB) + var(--gap) * var(--fs) * 1.9);
+  bottom:calc(var(--tapeBand) + var(--gap) * var(--fs) * 1.9);
   padding:0 calc(1.1rem + var(--safeR)) 0 calc(1.1rem + var(--safeL));
   transition:bottom .2s ease;
 }
@@ -119,15 +132,21 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
 .hint.gone{opacity:0}
 
 /* ── お手本テープ ─────────────────────── */
+/* テープは画面下端に貼り付けず、--tapeGapB + セーフエリアぶん浮かせる。
+   上下を同じ罫線で閉じることで、原稿用紙を切り出した一片として見せる。
+   高さは --tapeH の導出により、文字の上下に同じ余白が空く。 */
 .tapewrap{
-  position:fixed;left:0;right:0;bottom:0;height:calc(var(--tapeH) + var(--safeB));z-index:4;
+  position:fixed;left:0;right:0;
+  bottom:calc(var(--tapeGapB) + var(--safeB));
+  height:var(--tapeH);z-index:4;
   overflow:hidden;
   background:var(--panel);
   border-top:1px solid var(--rule);
-  box-shadow:0 -1px 0 var(--panel),0 -6px 18px rgba(23,26,21,.06);
+  border-bottom:1px solid var(--rule);
+  box-shadow:0 -6px 18px rgba(23,26,21,.06),0 4px 12px rgba(23,26,21,.05);
 }
 .tape{
-  position:absolute;left:0;bottom:calc(.95rem + var(--safeB));
+  position:absolute;left:0;bottom:var(--tapePadB);
   white-space:nowrap;
   font-size:var(--fs);
   line-height:1;
@@ -156,8 +175,11 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
   font-size:.38em;line-height:1;text-align:center;white-space:nowrap;
   color:var(--rule);letter-spacing:.02em;padding-bottom:.25em;
 }
+/* マーカーは文字を中心に対称に置く。上下に同じだけはみ出させないと、
+   1文字ぶんの高さしかない字に対して位置がずれて見える。 */
 .tapecaret{
-  position:absolute;bottom:var(--safeB);width:1px;height:calc(var(--tapeH) - 1.35rem);
+  position:absolute;bottom:calc(var(--tapePadB) - var(--tapeCaretPad));
+  width:1px;height:calc(var(--fs) + var(--tapeCaretPad) * 2);
   background:var(--shu);
   transition:left .18s cubic-bezier(.22,.7,.3,1);
 }
@@ -209,7 +231,8 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
 #logbox:focus{outline:2px solid var(--rule);outline-offset:-2px}
 
 @media (max-width:600px){
-  :root{--fs:1.1rem;--tapeH:4rem}
+  /* --tapeH は --fs / --tapePadB から導出されるので指定しない */
+  :root{--fs:1.1rem;--tapePadB:.95rem;--tapeGapB:.8rem}
   .bar{gap:.7rem;padding:calc(.6rem + var(--safeT)) calc(.7rem + var(--safeR)) .6rem calc(.7rem + var(--safeL))}
   .stats{gap:.7rem;width:100%;margin-left:0}
   .stage{padding:0 calc(.7rem + var(--safeR)) 0 calc(.7rem + var(--safeL))}
