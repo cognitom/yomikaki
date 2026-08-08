@@ -22,7 +22,7 @@ test("記法パーサ: ルビの親文字を正しく判定する", () => {
   ]);
 });
 
-test("記法パーサ: 改行と行頭全角スペースは入力対象外", () => {
+test("記法パーサ: 改行と全角スペースは入力対象外", () => {
   assert.ok(!T.includes("\n"));
   const autos = Object.entries(C.state.pre).filter(([, v]) => v);
   assert.ok(autos.length >= 2);
@@ -79,17 +79,24 @@ test("お手本の半角化は記法パーサより後に掛かる（｜と＃�
   assert.deepEqual(ruby, [["X", "えっくすわい", 2]], "｜ が半角化されるとルビ範囲が壊れる");
 });
 
-test("半角スペースは手動入力のまま、行頭の全角スペースだけ自動入力", () => {
+test("半角スペースは手動入力のまま、全角スペースは自動入力", () => {
   const d = C.parseAozora("Ｉ ａｍ ａ ｃａｔ。\n　つぎの行");
   assert.equal(d.target, "I am a cat。つぎの行", "英文中の半角スペースは打鍵対象として残す");
-  // 自動入力されるのは改行と行頭の全角スペースだけ
+  // 自動入力されるのは改行と全角スペースだけ
   assert.deepEqual(Object.values(d.pre).filter(Boolean), ["\n　"]);
 });
 
-test("行頭でない全角スペースは半角化も自動入力もされない", () => {
+test("行頭でない全角スペースも自動入力になる（issue #21）", () => {
   const d = C.parseAozora("あ　い");
-  assert.equal(d.target, "あ　い");
-  assert.deepEqual(Object.values(d.pre).filter(Boolean), []);
+  assert.equal(d.target, "あい", "半角化はしないが打鍵対象からは外す");
+  assert.deepEqual(Object.values(d.pre).filter(Boolean), ["　"]);
+});
+
+test("見出しの区切りの全角スペースは打たされない（issue #21）", () => {
+  // 「こころ」の冒頭。二文字目の全角スペースが打鍵対象に残っていた
+  const d = C.parseAozora("上　先生と私\n\n一\n\n　私はその人を常に先生と呼んでいた。");
+  assert.equal(d.target.slice(0, 6), "上先生と私私");
+  assert.equal(d.pre[1], "　", "「上」の直後の全角スペースが自動入力になる");
 });
 
 test("入力の半角化: 全角で打っても半角のお手本と一致する", () => {
