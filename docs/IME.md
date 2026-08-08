@@ -28,6 +28,9 @@ IME は変換中に `deleteCompositionText` → `insertCompositionText` を発�
 **③ 確定処理を `setTimeout` で遅延させてはならない。**
 `compositionend` の直後に次の変換が始まりうる（Enter を押さずに次の文を打ち始める操作は自然に起きる）。`setTimeout(0)` は次のタスクなのでキー入力に追い越され、`clearPending()` が新しい未確定文字列を破壊する。`queueMicrotask` なら現在のタスク直後＝次のキーイベントより確実に前に走る。
 
+**④ 確定後の描画を `requestAnimationFrame` に預けてはならない。**
+③ と同じ追い越しが起きる。rAF は `setTimeout` よりさらに後ろなので、確定の数ミリ秒後に次の変換が始まると、フレームが回る時点では既に `composing === true` になっている。テープの更新をそこへ預けると `composing` ガードに弾かれ、更新が丸ごと落ちる（issue #25：Enter を押さずに次の文を打ち始めるとお手本テープが1文ぶん遅れたまま止まる）。確定処理は測定も含めてすべて同じタスク内で済ませる。
+
 ## イベント
 
 | イベント | 処理 |
@@ -44,7 +47,7 @@ IME は変換中に `deleteCompositionText` → `insertCompositionText` を発�
 
 - DOM を触らない
 - キャレットを動かさない（`placeCaret` は `composing` でガード）
-- テープの `translateX` を更新しない（未確定文字列でキャレットだけが右へ動くため）
+- テープの `translateX` を更新しない（未確定文字列でキャレットだけが右へ動くため）。ただし**確定処理からの更新は例外**で、変換中でも必ず通す（`updateTape(force)`）。確定の直後に次の変換が始まっている場合があり、ここで止めると更新が落ちる（鉄則④）
 
 ### キャレット復帰の3層構造
 

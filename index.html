@@ -692,8 +692,10 @@ function leftInTape(el){
   while(el && el!==tape){ x+=el.offsetLeft; el=el.offsetParent; }
   return x;
 }
-function updateTape(){
-  if(composing) return;
+// force は確定処理からの呼び出し。確定の直後に次の変換が始まっていても更新を止めない
+// （issue #25）。それ以外（resize など）は変換中に走らせない。
+function updateTape(force){
+  if(composing && !force) return;
   const ti=tokenOfTarget[Math.min(cursor,target.length)];
   if(winStart<0 || (ti-winStart<EDGE && winStart>0) || (winEnd-ti<EDGE && winEnd<tokens.length)) buildWindow(ti);
   const el=cellEls.get(ti); if(!el) return;
@@ -838,7 +840,10 @@ function commit(s){
   }
   renderEditor();
   if(!composing) placeCaret();     // 変換中にキャレットを動かすと未確定文字列が壊れる
-  requestAnimationFrame(()=>{ syncScroll(); updateTape(); });
+  // テープの更新を requestAnimationFrame へ預けてはならない。Enter を押さずに次の文を
+  // 打ち始めると、フレームが回る前に次の変換が始まり、composing ガードで更新が丸ごと
+  // 落ちる（issue #25）。setTimeout を禁じる理由（IME.md 鉄則③）と同じ型の追い越し。
+  syncScroll(); updateTape(true);
   updateStats();
 }
 

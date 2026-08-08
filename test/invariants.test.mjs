@@ -22,6 +22,15 @@ test("鉄則③: 確定処理は setTimeout ではなくマイクロタスク", 
   assert.doesNotMatch(js, /setTimeout\([^,]*,\s*0\s*\)/);
 });
 
+test("鉄則④: 確定後の描画を requestAnimationFrame に預けない", () => {
+  // ③ と同じ追い越し。Enter を押さずに次の文を打ち始めると、フレームが回る時点では
+  // 既に composing===true で、テープの更新が composing ガードに丸ごと弾かれる（issue #25）。
+  const commit = js.match(/function commit\(s\)\{([\s\S]*?)\n\}/)[1].replace(/\/\/[^\n]*/g, "");
+  assert.doesNotMatch(commit, /requestAnimationFrame/, "確定処理と同じタスクで更新する");
+  assert.match(commit, /updateTape\(true\)/, "確定由来の更新は変換中でも通す");
+  assert.match(js, /function updateTape\(force\)\{\s*if\(composing && !force\) return;/);
+});
+
 test("変換中はキャレットを動かさない", () => {
   assert.match(js, /if\(!composing\)\s*placeCaret\(\)/);
 });
