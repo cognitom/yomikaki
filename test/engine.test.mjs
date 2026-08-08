@@ -243,7 +243,35 @@ test("統一しても判定用キーの長さは原文と一致する", () => {
 });
 
 test("統一の対象外はそのまま通す", () => {
-  for (const c of ["あ", "国", "　", " ", "A", "1", "。", "「", "ー"]) assert.equal(C.unify(c), c);
+  for (const c of ["あ", "国", "　", " ", "A", "1", "。", "、", "ー"]) assert.equal(C.unify(c), c);
+});
+
+// ── 括弧の統一（issue #23） ──
+
+test("和文の括弧はどれで打っても正解になる", () => {
+  for (const [tape, typed] of [["「あ」", "『あ』"], ["「あ」", "【あ】"], ["「あ」", "〈あ〉"],
+                               ["「あ」", "《あ》"], ["『あ』", "「あ」"], ["【あ】", "〈あ〉"]]) {
+    const r = typeAll(tape, typed);
+    assert.ok(r.allOk, `お手本 ${tape} に対して ${typed} が ng になった`);
+    assert.equal(r.cursor, [...tape].length);
+  }
+});
+
+test("括弧も表示は打った字・原文の字のまま残す", () => {
+  // 打ち分けを問わないだけで、『 』を「 」に書き換えてしまってはいけない
+  const r = typeAll("「あ」", "『あ』");
+  assert.equal(r.shown, "『あ』");
+  C.setDoc({ title: "t", author: "", text: "『あ』" });
+  assert.equal(C.state.target, "『あ』");
+  assert.equal(C.state.targetKey, "「あ」");
+  C.setDoc(C.SAMPLE);
+});
+
+test("開き括弧と閉じ括弧は混ざらない", () => {
+  // 向きまで潰すと、閉じ忘れがそのまま通ってしまう
+  assert.equal(C.unify("『"), "「");
+  assert.equal(C.unify("』"), "」");
+  assert.ok(!typeAll("「あ」", "「あ「").allOk, "閉じ括弧の代わりに開き括弧は打てない");
 });
 
 test("統一の規則は代表字と寄せる字の組で持つ", () => {
