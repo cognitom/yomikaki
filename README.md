@@ -63,12 +63,17 @@ HTTPS で開くと PWA として動く。
 node --test "test/*.test.mjs"
 ```
 
-node を入れていない場合は `shim/` を PATH に通すと、使い捨ての Docker コンテナで
-同じコマンドが動く。常駐するものは残らない。
+node を入れていない場合はコンテナで動かせる。`shim/` を PATH に通すと `node` /
+`npm` / `npx` がコンテナの中で実行される。Playwright とブラウザも同梱している。
 
 ```sh
+shim/_up                                  # コンテナを起動（初回はビルド）
 PATH="$PWD/shim:$PATH" node --test "test/*.test.mjs"
+shim/_down                                # 破棄
 ```
+
+`playwright` はコンテナにグローバルで入れてあるため、`import { chromium } from "playwright"`
+がそのまま解決できる。リポジトリに `node_modules` を持つ必要はない。
 
 `index.html` は単一ファイルを維持している（アーティファクト等でそのまま動かせるため）。
 PWA 用の `manifest.webmanifest` / `sw.js` / `icons/` だけが外にある。

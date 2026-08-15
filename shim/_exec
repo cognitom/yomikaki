@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# エージェント用コンテナの中でコマンドを実行する（node / npm / npx から symlink）。
+#
+# 呼ばれ方でコマンド名が決まるので、コマンドを増やすときは symlink を足すだけでよい。
+# 作業ディレクトリはリポジトリのルートからの相対位置で決めるため、サブディレクトリ
+# からでも同じ位置で動く。
+. "$(dirname "$0")/_env"
+if ! "${compose[@]}" ps --status running --quiet agent | grep -q .; then
+  echo "エージェント用コンテナが起動していません。起動するには:" >&2
+  echo "  $root/shim/_up" >&2
+  exit 1
+fi
+exec "${compose[@]}" exec -T -w "/work${PWD#"$root"}" agent "$(basename "$0")" "$@"

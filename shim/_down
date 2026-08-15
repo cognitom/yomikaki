@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# エージェント用コンテナを破棄する（polar の stop）。
+. "$(dirname "$0")/_env"
+"${compose[@]}" down --volumes --remove-orphans

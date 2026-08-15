@@ -1,0 +1,24 @@
+# エージェント用の使い捨て環境。issue ごとに1つ立てて、終わったら落とす。
+#
+# ports は書かない。rootless Docker でもホストのポート名前空間は共有されるため、
+# 手元の開発環境と publish が衝突する。ブラウザはコンテナ内で完結する。
+name: ${COMPOSE_PROJECT_NAME:-polar-yomikaki}
+
+services:
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    working_dir: /work
+    # 呼び出し元の uid で動かし、worktree に root 所有のファイルを作らせない
+    user: "${AGENT_UID:-0}:${AGENT_GID:-0}"
+    environment:
+      HOME: /tmp
+    volumes:
+      - ${WORKTREE_PATH:?WORKTREE_PATH is required}:/work
+    # 常駐させておき、shim から exec で入る
+    command: sleep infinity
+    init: true
+    labels:
+      polar.managed: "true"
+      polar.issue: "${POLAR_ISSUE:-manual}"

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# エージェント用コンテナを起動する（polar の start）。
+. "$(dirname "$0")/_env"
+"${compose[@]}" up -d --build --wait

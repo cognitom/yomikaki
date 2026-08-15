@@ -1,0 +1,9 @@
+# エージェント用の実行環境。node と playwright（ブラウザ同梱）が入る。
+#
+# playwright パッケージはグローバルに入れ、/node_modules から辿れるようにする。
+# ESM の import は NODE_PATH を見ず、ファイルから上へ node_modules/ を探すため、
+# ルートに置けば作業ディレクトリのどこからでも解決できる。
+# これでリポジトリ側に node_modules を持たずに済む。
+FROM mcr.microsoft.com/playwright:v1.62.1-noble
+RUN npm install -g playwright@1.62.1 \
+ && ln -s "$(npm prefix -g)/lib/node_modules" /node_modules

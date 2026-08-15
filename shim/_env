@@ -1,0 +1,11 @@
+# 共通の環境。_up / _down / _exec から source する。
+#
+# polar は start / stop をリポジトリ本体の cwd で実行するため、そこでの
+# git rev-parse は worktree ではなく本体を指す。polar が渡す $WORKTREE_PATH を
+# 優先し、人間が手で叩く場合だけ git から導く。
+set -euo pipefail
+root=${WORKTREE_PATH:-$(git rev-parse --show-toplevel)}
+export WORKTREE_PATH="$root"
+export COMPOSE_PROJECT_NAME="polar-$(basename "$root")"
+export AGENT_UID="$(id -u)" AGENT_GID="$(id -g)"
+compose=(docker compose -f "$root/compose.agent.yaml")

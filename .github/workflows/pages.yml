@@ -34,7 +34,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
       # 配信物ではないので Pages には含めない（path: . が全部を拾うため）
-      - run: rm -rf shim
+      - run: rm -rf shim Dockerfile.agent compose.agent.yaml
       - uses: actions/upload-pages-artifact@v3
         with:
           path: .
