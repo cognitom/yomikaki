@@ -63,6 +63,13 @@ HTTPS で開くと PWA として動く。
 node --test "test/*.test.mjs"
 ```
 
+node を入れていない場合は `shim/` を PATH に通すと、使い捨ての Docker コンテナで
+同じコマンドが動く。常駐するものは残らない。
+
+```sh
+PATH="$PWD/shim:$PATH" node --test "test/*.test.mjs"
+```
+
 `index.html` は単一ファイルを維持している（アーティファクト等でそのまま動かせるため）。
 PWA 用の `manifest.webmanifest` / `sw.js` / `icons/` だけが外にある。
 これらのパスはすべて相対で書くこと（GitHub Pages のサブパス配信で壊れるため）。
