@@ -33,6 +33,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      # 配信物ではないので Pages には含めない（path: . が全部を拾うため）
+      - run: rm -rf shim
       - uses: actions/upload-pages-artifact@v3
         with:
           path: .
