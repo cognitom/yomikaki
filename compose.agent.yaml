@@ -1,0 +1,19 @@
+services:
+  app:
+    image: mcr.microsoft.com/playwright:v1.62.1-noble
+    working_dir: /work
+    volumes:
+      - .:/work
+      - yomikaki-node_modules-cache:/work/node_modules
+    command: bash -c "[ -e node_modules/.package-lock.json ] || npm i; exec sleep infinity"
+    healthcheck:
+      test: ["CMD-SHELL", "test -e /work/node_modules/.package-lock.json"]
+      start_period: 10m
+      start_interval: 2s
+    init: true
+    labels:
+      polar.commands: "node,npm,npx"
+
+volumes:
+  yomikaki-node_modules-cache:
+    name: yomikaki-node_modules-cache
