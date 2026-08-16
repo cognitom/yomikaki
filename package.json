@@ -25,7 +25,8 @@
     "test": "test"
   },
   "scripts": {
-    "test": "node --test \"test/*.test.mjs\""
+    "test": "node --test \"test/*.test.mjs\"",
+    "serve": "node serve.mjs"
   },
   "devDependencies": {
     "playwright": "^1.62.1"

@@ -82,6 +82,19 @@ PWA 用の `manifest.webmanifest` / `sw.js` / `icons/` だけが外にある。
 コード上で機械的に検査する。IME 周りの落とし穴は再発しやすいため、
 これらを緩めるときは `docs/仕様書.md` の該当箇所を必ず読むこと。
 
+### `http://` での確認
+
+`file://` では Service Worker が登録できず、`manifest.webmanifest` の読み込みや
+ページ内 fetch の挙動も本番と異なる。これらを確認するときは同梱の静的サーバーを使う。
+
+```sh
+npm run serve   # http://localhost:8080/ で index.html を返す（ポート固定）
+```
+
+`test/browser.test.mjs` が Playwright でこのサーバーを起動し、`http://` 経由で
+Service Worker が `activated` まで進むことを自動で確認する（`npm test` に含まれる。
+chromium が無い環境では自動で skip する）。
+
 ## ドキュメント
 
 - [`docs/仕様書.md`](docs/仕様書.md) — 設計の全体像と「なぜそう決めたか」
