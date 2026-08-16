@@ -70,6 +70,21 @@ node を入れていない場合は `shim/` を PATH に通すと、使い捨て
 PATH="$PWD/shim:$PATH" node --test "test/*.test.mjs"
 ```
 
+### ブラウザでの動作確認
+
+`file://` で `index.html` を直接開いても単一ファイルとしては動くが、Service Worker が
+登録できない・`manifest.webmanifest` を読めない・fetch の挙動が本番と違うなど、
+PWA まわりは確認できない。ブラウザで確認するときは `http://` で開くこと。
+
+```sh
+npm run serve
+```
+
+[`http-server`](https://www.npmjs.com/package/http-server) で **8080 番ポート固定**の
+静的サーバーを立てる。`http://localhost:8080/` を開くと `index.html` が出る。
+ポート番号を変える場合は `package.json` の `serve` スクリプトと、このセクションの
+記述を両方直すこと。
+
 `index.html` は単一ファイルを維持している（アーティファクト等でそのまま動かせるため）。
 PWA 用の `manifest.webmanifest` / `sw.js` / `icons/` だけが外にある。
 これらのパスはすべて相対で書くこと（GitHub Pages のサブパス配信で壊れるため）。
