@@ -1,0 +1,33 @@
+{
+  "name": "yomikaki",
+  "version": "0.0.1",
+  "description": "読書しながらタイピングできる練習サイト",
+  "keywords": [
+    "keyboard",
+    "typing",
+    "Japanese",
+    "kana"
+  ],
+  "homepage": "https://github.com/cognitom/yomikaki#readme",
+  "bugs": {
+    "url": "https://github.com/cognitom/yomikaki/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cognitom/yomikaki.git"
+  },
+  "license": "ISC",
+  "author": "Tsutomu kawamura",
+  "type": "module",
+  "main": "index.html",
+  "directories": {
+    "doc": "docs",
+    "test": "test"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.mjs\""
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
+  }
+}
