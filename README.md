@@ -19,6 +19,17 @@
 
 `index.html` を開くだけ。ビルド不要・依存なしの単一 HTML。
 
+PWA（Service Worker・manifest）まで含めて確認したいときは `http://` で開く。
+`file://` では Service Worker が登録できず、manifest も読まれない。
+
+```sh
+npm run serve   # → http://localhost:8765/
+```
+
+ポートは **8765 固定**。node 標準ライブラリだけの静的サーバ（`scripts/serve.mjs`）で、
+追加の依存はない。`http://localhost` は secure context として扱われるため、
+これだけで PWA まわりが本番と同じ条件になる。
+
 GitHub Pages に置く場合は Settings → Pages で `main` ブランチのルートを指定する
 （`.github/workflows/pages.yml` を使う場合は Source を GitHub Actions にする）。
 

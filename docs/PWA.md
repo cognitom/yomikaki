@@ -16,6 +16,21 @@ icons/                 192 / 512 / maskable 512 / apple-touch 180
 - オフラインでも起動でき、収録サンプルは打てる。本文の取得だけは通信が要る。
 - `file://` では Service Worker を登録しない（そもそも登録できない）。
 
+## 動作確認
+
+`file://` では PWA まわりが丸ごと確認できない。Service Worker が登録できず、
+`manifest.webmanifest` も読まれず、ページ内 fetch のオリジンも本番と違う。
+
+```sh
+npm run serve   # → http://localhost:8765/
+```
+
+`http://localhost` は secure context として扱われるため、HTTPS を用意しなくても
+登録・キャッシュ・オフライン起動まで本番と同じ条件で確認できる。サーバは node
+標準ライブラリだけの `scripts/serve.mjs`（依存なし・ポート固定）。`test/serve.test.mjs`
+がルートで `index.html` が出ること、`sw.js` と manifest の Content-Type、
+ポート番号が README に書かれていることを検査する。
+
 ## 表示領域（standalone）
 
 ホーム画面から起動するとブラウザ UI が消え、ヘッダとテープがノッチ／ホームインジケータと重なる。`viewport-fit=cover` を指定し、`env(safe-area-inset-*)` を CSS 変数 `--safeT/B/L/R` に受けて、ヘッダの上端パディング、テープの高さ、入力欄の下端、テープキャレットの `bottom` に加算する。
