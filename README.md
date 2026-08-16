@@ -76,8 +76,9 @@ npm run serve
 `compose.agent.yaml` のコンテナ内であれば、同じコンテナの Playwright から
 そのまま `http://localhost:8888/` を開ける。
 
-node を入れていない場合は `shim/` を PATH に通すと、使い捨ての Docker コンテナで
-同じコマンドが動く。常駐するものは残らない。
+`shim/` にあるのは `node` だけで `npm` は無いため、`npm run serve` はこの方法では動かない。
+node を入れていない場合にこの shim で代替できるのは、上のテストのように `node` を直接呼ぶ
+コマンドだけ。使い捨ての Docker コンテナで実行され、常駐するものは残らない。
 
 ```sh
 PATH="$PWD/shim:$PATH" node --test "test/*.test.mjs"
