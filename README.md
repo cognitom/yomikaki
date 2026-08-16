@@ -63,6 +63,19 @@ HTTPS で開くと PWA として動く。
 node --test "test/*.test.mjs"
 ```
 
+### ブラウザでの動作確認
+
+`file://` では Service Worker が登録できず、`manifest.webmanifest` の読み込みや
+ページ内 fetch の挙動も本番と食い違う。`http://` で開いて確認すること。
+
+```sh
+npm run serve
+```
+
+ポート **8080** 固定でカレントディレクトリを配信する（`http://localhost:8080/` が `index.html`）。
+`compose.agent.yaml` のコンテナ内であれば、同じコンテナの Playwright から
+そのまま `http://localhost:8080/` を開ける。
+
 node を入れていない場合は `shim/` を PATH に通すと、使い捨ての Docker コンテナで
 同じコマンドが動く。常駐するものは残らない。
 
