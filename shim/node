@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-# node をローカルに入れずに使い捨てのコンテナで実行する。
-#
-# コンテナ内の作業ディレクトリはリポジトリのルートからの相対位置で決める。
-# サブディレクトリからでも worktree からでも同じように動く。
-# -u で呼び出し元の uid/gid を渡し、root 所有のファイルを作らせない。
-set -euo pipefail
-root=$(git rev-parse --show-toplevel)
-docker run --rm -u "$(id -u):$(id -g)" -v "$root:/work" -w "/work${PWD#"$root"}" node:22-alpine node "$@"
