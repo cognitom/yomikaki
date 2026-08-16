@@ -70,6 +70,18 @@ node を入れていない場合は `shim/` を PATH に通すと、使い捨て
 PATH="$PWD/shim:$PATH" node --test "test/*.test.mjs"
 ```
 
+### `http://` で開いて確認する
+
+`index.html` は `file://` でも単体で動くが、Service Worker の登録・manifest の読み込み・
+ページ内 fetch は `file://` では本番と挙動が違う（Service Worker はそもそも登録できない）。
+これらを確認したいときは、依存を足さない最小の静的サーバーを使う。
+
+```sh
+npm run serve   # http://localhost:4173/ で index.html を返す（ポート固定）
+```
+
+polar のコンテナ内 Playwright からブラウザ確認する場合もこのポートを使う。
+
 `index.html` は単一ファイルを維持している（アーティファクト等でそのまま動かせるため）。
 PWA 用の `manifest.webmanifest` / `sw.js` / `icons/` だけが外にある。
 これらのパスはすべて相対で書くこと（GitHub Pages のサブパス配信で壊れるため）。
