@@ -70,6 +70,9 @@ node を入れていない場合は `shim/` を PATH に通すと、使い捨て
 PATH="$PWD/shim:$PATH" node --test "test/*.test.mjs"
 ```
 
+Service Worker や manifest の確認は `file://` では動かないので、
+`npm run serve` で `http://localhost:8080/` を立てて開く。
+
 `index.html` は単一ファイルを維持している（アーティファクト等でそのまま動かせるため）。
 PWA 用の `manifest.webmanifest` / `sw.js` / `icons/` だけが外にある。
 これらのパスはすべて相対で書くこと（GitHub Pages のサブパス配信で壊れるため）。

@@ -5,9 +5,17 @@ services:
     volumes:
       - .:/work
       - node_modules:/work/node_modules
-    command: bash -c "[ -e node_modules/.package-lock.json ] || npm i; exec sleep infinity"
+    command: >
+      bash -c "
+        [ -e node_modules/.package-lock.json ] || npm i;
+        node serve.mjs &
+        exec sleep infinity
+      "
     healthcheck:
-      test: ["CMD-SHELL", "test -e /work/node_modules/.package-lock.json"]
+      # http://localhost:8080/ に応答することを見る。node_modules だけを見る
+      # チェックだと npm i 完了前に healthy になり、サーバーもまだ立っていない
+      # 状態でエージェントが動き出しかねない（issue #37）。
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/ -o /dev/null"]
       start_period: 10m
       start_interval: 2s
     init: true
