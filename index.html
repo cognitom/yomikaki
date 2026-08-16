@@ -121,6 +121,19 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
 .editor .ok{color:var(--ink)}
 .editor .ng{color:var(--shu);background:rgba(180,56,46,.09);border-radius:1px}
 .editor .auto{color:var(--mute)}
+/* 抜け字（脱落）の校正記号。Yの字の縦棒だけ2.5倍に伸ばしたもの。
+   打ち間違いと同じ赤字・網掛けにして揃える。フォントサイズに合わせて伸縮するよう em で置く。
+   縦位置は vertical-align:middle で他の文字と中心を揃える。 */
+.editor .drop{
+  display:inline-block;vertical-align:middle;
+  width:.55em;height:1.55em;
+  transform:translateY(-.1em);   /* vertical-align:middle は和文の字面中心よりやや下に寄るための補正 */
+  background:rgba(180,56,46,.09);border-radius:1px;
+}
+.editor .drop svg{display:block;width:100%;height:100%}
+.editor .drop polyline,.editor .drop line{
+  fill:none;stroke:var(--shu);stroke-width:5;stroke-linecap:round;stroke-linejoin:round;
+}
 .anchor{display:inline-block;width:0;height:1em;vertical-align:baseline}
 .compose{display:inline;min-height:1em}
 .hint{
@@ -504,7 +517,7 @@ function resetDP(){
 function step(ch){
   // ch は表示用（打った字そのまま）、key は判定用（類似記号を代表字に寄せたもの）
   const key=unify(ch);
-  typed.push({ch, key, cls:"ng", c:-1});
+  typed.push({ch, key, cls:"ng", c:-1, missBefore:false, missAfter:false});
   const L=Mloc.length, prev=rows[rows.length-1], cur=new Int32Array(L+1);
   cur[0]=prev[0]+1;
   for(let j=1;j<=L;j++){
@@ -519,17 +532,26 @@ function reclassify(){
   for(let j=0;j<last.length;j++) if(last[j]<=bv){bv=last[j];best=j;}   // 同点は最右
   cursor=anchorT+best;
 
-  let i=rows.length-1, j=best, guard=0;
+  // pendingMiss は「まだどの打った文字にも紐付いていない打ち漏らし」の数。
+  // 連続する打ち漏らしは backtrack 上で j だけが連続して減るので、その回数を数えておき、
+  // 次に確定する（i が進む）打った文字へまとめて1個の印として乗せる（issue #27）。
+  let i=rows.length-1, j=best, guard=0, pendingMiss=0;
   while(i>0 && guard++<100000){
     const it=typed[anchorK+i-1], eq = j>0 && it.key===Mloc[j-1];
     if(j>0 && rows[i][j]===rows[i-1][j-1]+(eq?0:1)){
-      it.cls = eq?"ok":"ng"; it.c = anchorT+j-1; i--; j--;
+      it.cls = eq?"ok":"ng"; it.c = anchorT+j-1;
+      it.missAfter = pendingMiss>0; pendingMiss=0; i--; j--;
     }else if(rows[i][j]===rows[i-1][j]+1){
-      it.cls="ng"; it.c=-1; i--;                                        // 余計に打った
+      it.cls="ng"; it.c=-1;                                             // 余計に打った
+      it.missAfter = pendingMiss>0; pendingMiss=0; i--;
     }else if(j>0 && rows[i][j]===rows[i][j-1]+1){
-      j--;                                                              // 打ち漏らし
+      pendingMiss++; j--;                                               // 打ち漏らし
     }else{ break; }
   }
+  // i===0 まで戻っても j が残っていれば、窓の最初の文字より手前（直前のアンカー地点）
+  // で打ち漏らしがあったということ。紐付ける先の「打った文字」が存在しないので、
+  // 窓の最初の文字の前に印をつける（まだ何も打っていなければ紐付け先がないので何もしない）。
+  if(typed.length>anchorK) typed[anchorK].missBefore = (i===0 && j>0);
 }
 function maybeAnchor(){
   const n=typed.length-anchorK;
@@ -551,12 +573,17 @@ function autoHTML(s){
   let o=""; for(const c of s) o += c==="\n" ? "<br>" : `<span class="auto">${esc(c)}</span>`;
   return o;
 }
+// 抜け字（脱落）の校正記号。Yの字の縦棒だけ2.5倍に伸ばした形をSVGで描く。
+// 連続する打ち漏らしはこの1個だけで表す（見た目は CSS 側の .drop で整える）。
+const DROP_MARK='<span class="drop" aria-hidden="true"><svg viewBox="0 0 34 64"><polyline points="3,3 17,19 31,3"/><line x1="17" y1="19" x2="17" y2="59"/></svg></span>';
 function renderRange(a,b,em,tail){
   let out="", e=em;
   for(let k=a;k<b;k++){
     const it=typed[k];
     if(it.c>=e){ for(let u=e;u<=it.c;u++) if(pre[u]) out+=autoHTML(pre[u]); e=it.c+1; }
+    if(it.missBefore) out+=DROP_MARK;
     out += `<span class="${it.cls}">${esc(it.ch)}</span>`;
+    if(it.missAfter) out+=DROP_MARK;
   }
   if(tail!=null){ for(let u=e;u<=tail;u++) if(pre[u]) out+=autoHTML(pre[u]); }
   return {html:out, em:e};
