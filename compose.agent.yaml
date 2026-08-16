@@ -4,7 +4,7 @@ services:
     working_dir: /work
     volumes:
       - .:/work
-      - yomikaki-node_modules-cache:/work/node_modules
+      - node_modules:/work/node_modules
     command: bash -c "[ -e node_modules/.package-lock.json ] || npm i; exec sleep infinity"
     healthcheck:
       test: ["CMD-SHELL", "test -e /work/node_modules/.package-lock.json"]
@@ -15,5 +15,4 @@ services:
       polar.commands: "node,npm,npx"
 
 volumes:
-  yomikaki-node_modules-cache:
-    name: yomikaki-node_modules-cache
+  node_modules:
