@@ -17,7 +17,7 @@ test("カードページから本文XHTMLへのリンクを抽出できる", () 
 });
 
 test("カードURLから人物IDと作品IDを取り出せる", () => {
-  const re = /cards\/(\d{6})\/card(\d+)/;
+  const re = new RegExp(html.match(/const m=v\.match\((\/.*?\/)\);/)[1].slice(1, -1));
   const m = "https://www.aozora.gr.jp/cards/000148/card789.html".match(re);
   assert.deepEqual([m[1], m[2]], ["000148", "789"]);
   assert.equal("https://example.com/nope".match(re), null);
