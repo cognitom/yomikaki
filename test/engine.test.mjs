@@ -50,6 +50,34 @@ test("脱落: 打ち漏らしを認めて先へ進む", () => {
   assert.ok(cls().every(c => c === "ok"));
 });
 
+// ── 抜け字の校正記号（issue #27） ──
+
+test("脱落: 直前に打った文字に印がつき、連続した脱落は1個にまとまる", () => {
+  const s = type(T.slice(0, 10) + T.slice(12, 22));
+  const marked = s.typed.map((t, i) => t.missAfter ? i : -1).filter(i => i >= 0);
+  assert.deepEqual(marked, [9], "10文字目の直後で2文字脱落しているので、その直前の1文字だけに印がつく");
+  assert.ok(s.typed.every(t => !t.missBefore), "先頭からの脱落ではないので missBefore は立たない");
+});
+
+test("脱落: 先頭から打ち漏らすと最初に打った文字の前に印がつく", () => {
+  const s = type(T.slice(2, 20));
+  assert.ok(s.typed[0].missBefore, "アンカー直後の脱落は最初の文字の前に印がつくこと");
+  assert.ok(s.typed.every(t => !t.missAfter));
+});
+
+test("脱落: 描画では校正記号がひとつの <span class=\"drop\"> として挿入される", () => {
+  const s = type(T.slice(0, 10) + T.slice(12, 22));
+  const html = C.renderRange(0, s.typed.length, 0, Math.min(s.cursor, T.length)).html;
+  const marks = html.match(/class="drop"/g) || [];
+  assert.equal(marks.length, 1);
+});
+
+test("脱落なしでは校正記号が描画されない", () => {
+  const s = type(T.slice(0, 20));
+  const html = C.renderRange(0, s.typed.length, 0, Math.min(s.cursor, T.length)).html;
+  assert.ok(!html.includes("drop"));
+});
+
 test("無関係な文字列を10文字打ち込んでも自己回復する", () => {
   const s = T.slice(0, 20) + "あいうえおかきくけこ" + T.slice(20, 60);
   assert.equal(type(s).cursor, 60);
