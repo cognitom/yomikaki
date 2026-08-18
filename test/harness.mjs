@@ -20,7 +20,10 @@ export { SAMPLE, parseAozora, setDoc, engineReset, step, reclassify, maybeAnchor
          unify, unifyAll, SIMILAR_GROUPS,
          hashText, workId, storageKey, storageGet, storageSet, storageRemove,
          STORAGE_PREFIX, STORAGE_VERSION,
-         resolveResumeCursor, loadBookmark, saveBookmark, clearBookmark };
+         resolveResumeCursor, loadBookmark, saveBookmark, clearBookmark,
+         HISTORY_LIMIT, MIN_SESSION_KEYS, buildSessionRecord, isNoiseSession,
+         upsertHistory, loadHistory, saveHistorySession,
+         sessionEfficiency, sessionAvgSegment, sessionMissRate };
 export const state = {
   get tokens(){return tokens}, get target(){return target},
   get targetKey(){return targetKey},
