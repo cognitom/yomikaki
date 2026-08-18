@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import crypto from "node:crypto";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 
@@ -18,17 +19,23 @@ export { SAMPLE, parseAozora, setDoc, engineReset, step, reclassify, maybeAnchor
          applySkips, NOISE_LINES, AUTO_LINES, AUTO_CHARS,
          unify, unifyAll, SIMILAR_GROUPS,
          hashText, workId, storageKey, storageGet, storageSet, storageRemove,
-         STORAGE_PREFIX, STORAGE_VERSION };
+         STORAGE_PREFIX, STORAGE_VERSION,
+         resolveResumeCursor, loadBookmark, saveBookmark, clearBookmark };
 export const state = {
   get tokens(){return tokens}, get target(){return target},
   get targetKey(){return targetKey},
   get pre(){return pre}, get tokenOfTarget(){return tokenOfTarget},
-  get typed(){return typed}, get cursor(){return cursor}, get anchorK(){return anchorK}
+  get typed(){return typed}, get cursor(){return cursor}, get anchorK(){return anchorK},
+  get anchorT(){return anchorT}
 };
 `;
-  const tmp = path.join(ROOT, "test", ".core.generated.mjs");
+  // node --test はファイルを並行実行するので、固定名だと呼び出し元どうしで
+  // 書き込み・削除が競合する（一方が読む前にもう一方が消す）。呼び出しごとに名前を分ける。
+  const tmp = path.join(ROOT, "test", `.core.generated.${crypto.randomUUID()}.mjs`);
   fs.writeFileSync(tmp, src);
-  const mod = await import(pathToFileURL(tmp).href + "?t=" + Date.now());
-  fs.unlinkSync(tmp);
-  return mod;
+  try {
+    return await import(pathToFileURL(tmp).href);
+  } finally {
+    fs.unlinkSync(tmp);
+  }
 }
