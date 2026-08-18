@@ -246,6 +246,27 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
 .pkStatus{font-size:.68rem;color:var(--shu);line-height:1.6;min-height:1.2em}
 .pk.busy{pointer-events:none;opacity:.7}
 
+/* ── 練習履歴（issue #18）──────────────── */
+.hist{
+  position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;
+  background:rgba(23,26,21,.32);padding:1rem;
+}
+.hist[hidden]{display:none}
+.histCard{
+  background:var(--panel);border:1px solid var(--rule);
+  width:min(94vw,48rem);max-height:88vh;overflow-y:auto;padding:1.1rem;
+  display:flex;flex-direction:column;gap:.55rem;
+}
+.histHead{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:.2rem}
+.histHead h2{font-size:1rem;font-weight:400;letter-spacing:.16em}
+.histTableWrap{overflow-x:auto}
+.histTable{border-collapse:collapse;width:100%;font-size:.78rem}
+.histTable th,.histTable td{padding:.32rem .55rem;text-align:right;border-bottom:1px solid var(--rule-soft);white-space:nowrap}
+.histTable th:first-child,.histTable td:first-child,
+.histTable th:nth-child(2),.histTable td:nth-child(2){text-align:left}
+.histTable th{color:var(--mute);font-weight:400;font-size:.66rem;letter-spacing:.06em}
+.histEmpty{text-align:center;color:var(--mute);padding:1rem 0}
+
 .probe{position:absolute;visibility:hidden;white-space:pre;font-size:var(--fs);font-family:var(--mincho);word-spacing:var(--wordsp)}
 #logbox{
   position:fixed;right:0;top:3.2rem;width:16rem;height:min(62vh,26rem);z-index:9;
@@ -293,6 +314,7 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
     <button data-gap="2" aria-pressed="true">2</button><button data-gap="3">3</button>
     <button id="install" hidden style="margin-left:.5rem">ホーム画面へ</button>
     <button id="reset" style="margin-left:.5rem">最初から</button>
+    <button id="histbtn">履歴</button>
     <button id="logbtn">ログ</button>
     <button id="logcopy">コピー</button>
     <button id="logclear">ログ消去</button>
@@ -326,6 +348,20 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
     <textarea id="pkPaste" placeholder="ここに本文を貼り付け"></textarea>
     <div class="pkRow"><button id="pkPasteGo">この文章で始める</button></div>
     <p class="pkStatus" id="pkStatus"></p>
+  </div>
+</div>
+<div class="hist" id="histPanel" hidden>
+  <div class="histCard">
+    <div class="histHead"><h2>練習履歴</h2><button id="histClose">閉じる</button></div>
+    <div class="histTableWrap">
+      <table class="histTable">
+        <thead><tr>
+          <th>日時</th><th>作品</th><th>経過</th><th>進んだ字数</th>
+          <th>打鍵数</th><th>打鍵効率</th><th>平均変換長</th><th>ミス率</th>
+        </tr></thead>
+        <tbody id="histBody"></tbody>
+      </table>
+    </div>
   </div>
 </div>
 <span class="probe" id="probe"></span>
@@ -669,6 +705,54 @@ function saveBookmark(id, cursorVal){
 function clearBookmark(id){
   storageRemove(storageKey("bookmark", id));
 }
+
+/* ── セッション履歴（issue #18）──
+   1回の練習（作品切り替え・「最初から」・タブを離れるまで）を1レコードとして残す。
+   打った文字列や判定結果そのものは持たず、集計済みの数値だけを保存する
+   （しおりと同じく、再現に要らないものは持たない方針）。
+
+   レコードは作品をまたいだ1本のログとして保存する（storageKey の id は固定値）。
+   「日時」はセッション開始時刻 sid で固定し、タブを行き来して複数回保存されても
+   同じセッションは sid で1レコードに上書き統合される（upsertHistory）。 */
+const HISTORY_LIMIT = 300;      // 件数の上限。超えたら古いものから捨てる
+const MIN_SESSION_KEYS = 5;     // これ未満の打鍵で離脱したセッションはノイズとして捨てる
+
+function buildSessionRecord(p){
+  return {
+    sid: p.sessionStartedAt, at: p.sessionStartedAt,
+    workId: p.workId, title: p.title, author: p.author||"",
+    chars: Math.max(0, p.chars|0),
+    elapsedMs: Math.max(0, p.elapsedMs|0),
+    keys: Math.max(0, p.keys|0),
+    commits: Math.max(0, p.commits|0),
+    typedLength: Math.max(0, p.typedLength|0),
+    ngCount: Math.max(0, p.ngCount|0),
+  };
+}
+function isNoiseSession(r){ return r.keys < MIN_SESSION_KEYS; }
+
+// 同じ sid のレコードは新しい内容で上書きし、それ以外は末尾に足す。
+// 挿入順＝時系列順を保つ（sid が既存なら位置は変えずその場で置き換える）。
+function upsertHistory(history, record){
+  const idx = history.findIndex(r => r.sid === record.sid);
+  const next = idx>=0
+    ? history.slice(0,idx).concat([record], history.slice(idx+1))
+    : history.concat([record]);
+  return next.length>HISTORY_LIMIT ? next.slice(next.length-HISTORY_LIMIT) : next;
+}
+function loadHistory(){
+  const list = storageGet(storageKey("history","log"));
+  return Array.isArray(list) ? list : [];
+}
+function saveHistorySession(record){
+  if(isNoiseSession(record)) return false;
+  return storageSet(storageKey("history","log"), upsertHistory(loadHistory(), record));
+}
+
+// 表示用の指標。生の数値だけ保存し、比率はここで毎回算出する（README「統計の読み方」と同じ式）。
+function sessionEfficiency(r){ return r.chars>0 ? r.keys/r.chars : null; }        // 打鍵効率（打/字）
+function sessionAvgSegment(r){ return r.commits>0 ? r.typedLength/r.commits : null; } // 平均変換長（字/変換）
+function sessionMissRate(r){ return r.typedLength>0 ? r.ngCount/r.typedLength : null; } // ミス率
 //#endregion testable
 
 /* ═══════════════════════════════════════════════════
@@ -847,9 +931,10 @@ function countKey(e){
   if(lastKey && now-lastKey<IDLE) elapsed += now-lastKey;
   lastKey=now;
 }
+function currentNgCount(){ return ngFrozen + typed.slice(anchorK).filter(t=>t.cls==="ng").length; }
 function updateStats(){
   const min=elapsed/60000;
-  const ng=ngFrozen + typed.slice(anchorK).filter(t=>t.cls==="ng").length;
+  const ng=currentNgCount();
   $("sCpm").textContent = min>0.005 ? Math.round(cursor/min) : "—";
   $("sKpm").textContent = min>0.005 ? Math.round(keys/min) : "—";
   $("sEff").textContent = cursor>0 ? (keys/cursor).toFixed(2) : "—";
@@ -857,6 +942,22 @@ function updateStats(){
   $("sErr").textContent = typed.length>0 ? (ng/typed.length*100).toFixed(1) : "—";
   $("sPos").textContent = `${cursor}/${target.length}`;
 }
+
+/* ── セッション履歴の記録（issue #18）──
+   1セッション＝「作品を読み込んでから、次に区切りが来るまで」。区切りは
+   ①作品の切り替え ②「最初から」による再スタート ③タブが隠れる（visibilitychange）。
+   ③はモバイルでタブを閉じる前に unload 系イベントが来ないことがあるための保険で、
+   同じセッション中に何度呼ばれても sid で1レコードに上書き統合される（upsertHistory）。 */
+let sessionWork=null, sessionWorkId=null, sessionStartedAt=0, sessionStartCursor=0;
+function flushSession(){
+  if(!sessionStartedAt) return;               // まだセッションが始まっていない（初回読み込み前）
+  saveHistorySession(buildSessionRecord({
+    sessionStartedAt, workId:sessionWorkId, title:sessionWork.title, author:sessionWork.author,
+    chars:cursor-sessionStartCursor, elapsedMs:elapsed, keys, commits,
+    typedLength:typed.length, ngCount:currentNgCount(),
+  }));
+}
+document.addEventListener("visibilitychange", ()=>{ if(document.hidden) flushSession(); });
 
 /* ═══════════════════════════════════════════════════
    7. IME 捕捉
@@ -929,7 +1030,7 @@ document.addEventListener("selectionchange", ()=>{
   placeCaret();
 });
 document.addEventListener("mousedown", e=>{
-  if(e.target.closest("button, #logbox, .pk")) return;
+  if(e.target.closest("button, #logbox, .pk, .hist")) return;
   e.preventDefault(); editor.focus(); placeCaret();
 });
 
@@ -968,7 +1069,7 @@ document.querySelectorAll("[data-gap]").forEach(b=>{
     requestAnimationFrame(()=>{ syncScroll(); updateTape(); });
   });
 });
-$("reset").addEventListener("click", ()=>start());
+$("reset").addEventListener("click", ()=>{ flushSession(); start(); });
 $("logbtn").addEventListener("click", ()=>{
   logOn=!logOn; $("logbox").hidden=!logOn;
   $("logbtn").setAttribute("aria-pressed", String(logOn));
@@ -1004,6 +1105,7 @@ setInterval(()=>{
 }, 500);
 
 function applyWork(w){
+  flushSession();     // 作品切り替えは区切りのよいとき。旧作品の状態が消える前に記録する
   setDoc(w);
   tokenW=new Float64Array(tokens.length);
   cum=new Float64Array(tokens.length+1);
@@ -1025,6 +1127,7 @@ function offerResume(id, at){
 // at より手前の自動挿入（改行・字下げ）が入力欄に漏れ出さないようにする。
 function start(at=0){
   engineReset(at);
+  sessionWork=WORK; sessionWorkId=workId(WORK); sessionStartedAt=Date.now(); sessionStartCursor=cursor;
   keys=0; elapsed=0; lastKey=0; commits=0;
   frozenUpto=0; emFrozen=cursor; lastLiveHTML=null;
   frozenEl.innerHTML=""; liveEl.innerHTML=""; composeEl.textContent=ZWSP;
@@ -1153,6 +1256,43 @@ $("pkPasteGo").addEventListener("click", ()=>{
   if(t.trim().length<20){ dlgStatus.textContent="本文を貼り付けてください"; return; }
   grab(async()=>({title:$("pkTitle").value.trim()||"貼り付けテキスト", author:"", kana:"不明", text:t}));
 });
+
+/* ── 練習履歴パネル（issue #18）──
+   打鍵効率の推移が「かな入力できているか」の唯一の指標（README「統計の読み方」）なので、
+   グラフは持たず、時系列に並べた表だけで傾向が読み取れるようにする。 */
+function fmtElapsed(ms){
+  const s=Math.round(ms/1000);
+  return `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;
+}
+function fmtHistDate(ts){
+  return new Date(ts).toLocaleString("ja-JP",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});
+}
+function renderHistory(){
+  // 古い→新しいの順（時系列で読めるように）。sid が同じレコードへの上書きは
+  // 挿入位置を変えないので、通常はこの並びのまま history.log に入っている。
+  const rows=loadHistory().slice().sort((a,b)=>a.at-b.at);
+  const body=$("histBody");
+  if(rows.length===0){
+    body.innerHTML=`<tr><td colspan="8" class="histEmpty">まだ記録がありません</td></tr>`;
+    return;
+  }
+  body.innerHTML=rows.map(r=>{
+    const eff=sessionEfficiency(r), seg=sessionAvgSegment(r), miss=sessionMissRate(r);
+    return `<tr>
+      <td>${esc(fmtHistDate(r.at))}</td>
+      <td>${esc(r.title)}</td>
+      <td>${fmtElapsed(r.elapsedMs)}</td>
+      <td>${r.chars}</td>
+      <td>${r.keys}</td>
+      <td>${eff!=null?eff.toFixed(2):"—"}</td>
+      <td>${seg!=null?seg.toFixed(1):"—"}</td>
+      <td>${miss!=null?(miss*100).toFixed(1)+"%":"—"}</td>
+    </tr>`;
+  }).join("");
+}
+const histPanel=$("histPanel");
+$("histbtn").addEventListener("click", ()=>{ renderHistory(); histPanel.hidden=false; });
+$("histClose").addEventListener("click", ()=>{ histPanel.hidden=true; editor.focus(); placeCaret(); });
 
 /* ═══════════════════════════════════════════════════
    11. PWA（ホーム画面へのインストール）
