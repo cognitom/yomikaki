@@ -200,6 +200,19 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
   content:"";position:absolute;left:-3px;bottom:-1px;
   border:3.5px solid transparent;border-bottom-color:var(--shu);
 }
+/* ── しおり再開バー（issue #17）───────── */
+/* 読み込み直後だけ出る一時的な帯なので、ヘッダより上に被せる素朴な作りでよい */
+.bm{
+  position:fixed;top:0;left:0;right:0;z-index:21;
+  display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;
+  padding:calc(.6rem + var(--safeT)) calc(1.1rem + var(--safeR)) .6rem calc(1.1rem + var(--safeL));
+  background:var(--rule);color:var(--panel);
+  font-size:.75rem;letter-spacing:.04em;
+}
+.bm[hidden]{display:none}
+.bm button{border-color:var(--panel);color:var(--panel)}
+.bm button:hover{background:var(--panel);color:var(--rule)}
+
 /* ── 作品選択 ─────────────────────────── */
 .pk{
   position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;
@@ -256,6 +269,12 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
 </style>
 </head>
 <body>
+
+<div class="bm" id="bmBar" hidden>
+  <span id="bmMsg"></span>
+  <button id="bmContinue">続きから</button>
+  <button id="bmRestart">最初から</button>
+</div>
 
 <header class="bar">
   <div class="work"><span class="t" id="wTitle">—</span><span class="a" id="wAuthor"></span></div>
@@ -503,8 +522,12 @@ const FORCE = 240;     // 安全弁
 
 let typed, rows, Mloc, anchorT, anchorK, cursor, ngFrozen;
 
-function engineReset(){
-  typed=[]; anchorT=0; anchorK=0; cursor=0; ngFrozen=0;
+// at を渡すと、そこから読み始めたていで初期化する（しおり再開・issue #17）。
+// DP のアンカーを at に置くので、以降の判定はしおり位置からの継続として動く。
+// 範囲外の値は防御的に丸める（有効な値かどうかの判断は resolveResumeCursor 側の責務）。
+function engineReset(at=0){
+  const start=Math.max(0, Math.min(Number.isFinite(at)?at:0, target.length));
+  typed=[]; anchorT=start; anchorK=0; cursor=start; ngFrozen=0;
   resetDP();
 }
 function resetDP(){
@@ -627,6 +650,25 @@ function storageSet(key,value){
 function storageRemove(key){
   try{ localStorage.removeItem(key); }catch{}
 }
+
+/* ── しおり（読みかけ位置・issue #17）──
+   保存するのは cursor（確定済み文字数）だけ。打った文字列そのものは持たない
+   （テープと自動挿入は target/pre から作り直せるので、位置さえあれば十分）。
+   保存済みの cursor が本文の長さを超えていたら、改版などで本文が変わったとみなし
+   先頭にフォールバックする（末尾に丸めると「読み終わった」状態に化けてしまう）。 */
+function resolveResumeCursor(savedCursor, targetLength){
+  return (typeof savedCursor==="number" && savedCursor>=0 && savedCursor<=targetLength) ? savedCursor : 0;
+}
+function loadBookmark(id){
+  const saved=storageGet(storageKey("bookmark", id));
+  return saved && typeof saved.cursor==="number" ? saved.cursor : null;
+}
+function saveBookmark(id, cursorVal){
+  storageSet(storageKey("bookmark", id), {cursor:cursorVal});
+}
+function clearBookmark(id){
+  storageRemove(storageKey("bookmark", id));
+}
 //#endregion testable
 
 /* ═══════════════════════════════════════════════════
@@ -634,6 +676,7 @@ function storageRemove(key){
    ═══════════════════════════════════════════════════ */
 const editor=$("editor"), frozenEl=$("frozen"), liveEl=$("live"), composeEl=$("compose");
 const scrollEl=$("scroll"), hintEl=$("hint");
+const bmBar=$("bmBar"), bmMsg=$("bmMsg"), bmContinueBtn=$("bmContinue"), bmRestartBtn=$("bmRestart");
 const HINT=hintEl.textContent;      // インストール案内で差し替えるので初期文言を控えておく
 let frozenUpto=0, emFrozen=0, lastLiveHTML=null;
 function $(id){ return document.getElementById(id); }
@@ -901,6 +944,7 @@ function commit(s){
     // 超えたときにアンカーが進まず cursor が頭打ちになる。
     // 全角で打たれた英数記号は半角に寄せてから照合する（お手本も半角に統一済み）
     for(const ch of normalizeInput(s)){ step(ch); reclassify(); maybeAnchor(); }
+    saveBookmark(workId(WORK), cursor);
     commits++;
     log("COMMIT", s+" → cursor "+before+"→"+cursor);
   }
@@ -924,7 +968,7 @@ document.querySelectorAll("[data-gap]").forEach(b=>{
     requestAnimationFrame(()=>{ syncScroll(); updateTape(); });
   });
 });
-$("reset").addEventListener("click", start);
+$("reset").addEventListener("click", ()=>start());
 $("logbtn").addEventListener("click", ()=>{
   logOn=!logOn; $("logbox").hidden=!logOn;
   $("logbtn").setAttribute("aria-pressed", String(logOn));
@@ -963,13 +1007,26 @@ function applyWork(w){
   setDoc(w);
   tokenW=new Float64Array(tokens.length);
   cum=new Float64Array(tokens.length+1);
-  start();
+  const id=workId(w);
+  const at=resolveResumeCursor(loadBookmark(id), target.length);
+  if(at>0) offerResume(id, at); else start(0);
 }
 
-function start(){
-  engineReset();
+// しおりがあれば「続きから／最初から」を選ばせる。選ぶまで start() は呼ばない。
+function offerResume(id, at){
+  bmMsg.textContent=`しおりがあります（${at}/${target.length}字まで読了）`;
+  bmBar.hidden=false;
+  bmContinueBtn.onclick=()=>{ bmBar.hidden=true; start(at); };
+  bmRestartBtn.onclick=()=>{ bmBar.hidden=true; clearBookmark(id); start(0); };
+}
+
+// at を渡すとしおり位置から再開する。入力欄は空のまま（過去の入力は復元しない）で、
+// 統計もゼロから数え直す。emFrozen は engineReset が丸めた cursor に揃え、
+// at より手前の自動挿入（改行・字下げ）が入力欄に漏れ出さないようにする。
+function start(at=0){
+  engineReset(at);
   keys=0; elapsed=0; lastKey=0; commits=0;
-  frozenUpto=0; emFrozen=0; lastLiveHTML=null;
+  frozenUpto=0; emFrozen=cursor; lastLiveHTML=null;
   frozenEl.innerHTML=""; liveEl.innerHTML=""; composeEl.textContent=ZWSP;
   winStart=-1; winEnd=-1; tokenW=new Float64Array(tokens.length);
   hintEl.textContent=HINT; hintEl.classList.remove("gone");
