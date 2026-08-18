@@ -320,7 +320,7 @@ button:focus-visible{outline:2px solid var(--shu);outline-offset:1px}
    0. 原文（青空文庫記法）
    ═══════════════════════════════════════════════════ */
 const SAMPLE = {
-  title:"吾輩は猫である", author:"夏目漱石",
+  title:"吾輩は猫である", author:"夏目漱石", person:"000148", work:"789",
   text:
 `吾輩は猫である。名前はまだ無い。
 　どこで生れたかとんと見当《けんとう》がつかぬ。何でも薄暗いじめじめした所でニャーニャー泣いていた事だけは記憶している。吾輩はここで始めて人間というものを見た。しかもあとで聞くとそれは書生という人間中で一番｜獰悪《どうあく》な種族であったそうだ。この書生というのは時々我々を捕えて煮て食うという話である。
@@ -588,10 +588,49 @@ function renderRange(a,b,em,tail){
   if(tail!=null){ for(let u=e;u<=tail;u++) if(pre[u]) out+=autoHTML(pre[u]); }
   return {html:out, em:e};
 }
+
+/* ═══════════════════════════════════════════════════
+   3. 保存基盤（storage）— #17しおり・#18セッション履歴の土台
+   ═══════════════════════════════════════════════════ */
+
+/* ── 作品の同定 ──
+   保存データのキーになる作品ID。読み込み経路によって決め方が違う。
+   ・プリセット／カードURL … カードの「人物ID/作品ID」をそのまま使う
+   ・直接貼り付け … IDがないので本文のハッシュで代用する（同じ文章を貼り直せば同じ作品と認識できる） */
+function hashText(s){
+  // FNV-1a 32bit。暗号強度は不要で、貼り付けテキストの同一性判定にだけ使う
+  let h=0x811c9dc5;
+  for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,0x01000193); }
+  return (h>>>0).toString(36);
+}
+function workId(w){
+  return (w.person && w.work) ? `${w.person}/${w.work}` : `paste:${hashText(w.text)}`;
+}
+
+/* ── localStorage の薄い抽象化 ──
+   キーにプレフィックスとスキーマバージョンを埋め込み、将来形式を変えたときに
+   古いデータを安全に無視できるようにする。localStorage が使えない環境（プライベート
+   ブラウジング・埋め込み等）、容量超過（QuotaExceededError）、壊れたJSONは
+   すべて「データなし」として扱い、例外は上に漏らさない。 */
+const STORAGE_PREFIX="yomikaki", STORAGE_VERSION=1;
+function storageKey(kind,id){ return `${STORAGE_PREFIX}:v${STORAGE_VERSION}:${kind}:${id}`; }
+function storageGet(key){
+  try{
+    const raw=localStorage.getItem(key);
+    return raw==null ? null : JSON.parse(raw);
+  }catch{ return null; }               // localStorage不在／壊れたJSONも「データなし」扱い
+}
+function storageSet(key,value){
+  try{ localStorage.setItem(key, JSON.stringify(value)); return true; }
+  catch{ return false; }               // QuotaExceededErrorもここで握りつぶす
+}
+function storageRemove(key){
+  try{ localStorage.removeItem(key); }catch{}
+}
 //#endregion testable
 
 /* ═══════════════════════════════════════════════════
-   3. 入力欄の描画
+   4. 入力欄の描画
    ═══════════════════════════════════════════════════ */
 const editor=$("editor"), frozenEl=$("frozen"), liveEl=$("live"), composeEl=$("compose");
 const scrollEl=$("scroll"), hintEl=$("hint");
@@ -645,7 +684,7 @@ function pendingText(){ return strip(composeEl.textContent); }
 function syncScroll(){ scrollEl.scrollTop=scrollEl.scrollHeight; }
 
 /* ═══════════════════════════════════════════════════
-   4. お手本テープ（窓の仮想化 + 実測アライン）
+   5. お手本テープ（窓の仮想化 + 実測アライン）
    ═══════════════════════════════════════════════════ */
 const tape=$("tape"), tapewrap=$("tapewrap"), tapecaret=$("tapecaret"), probe=$("probe");
 const HALF=400, EDGE=150, LOOKAHEAD=7, EDGE_PAD=16;
@@ -750,7 +789,7 @@ function updateTape(force){
 }
 
 /* ═══════════════════════════════════════════════════
-   5. 統計
+   6. 統計
    ═══════════════════════════════════════════════════ */
 // IME経由のキーは Android で "Unidentified"、Windows で "Process" になる。
 // これらは実打鍵なので必ず数える。除外するのは純粋な修飾キーのみ。
@@ -777,7 +816,7 @@ function updateStats(){
 }
 
 /* ═══════════════════════════════════════════════════
-   6. IME 捕捉
+   7. IME 捕捉
    ═══════════════════════════════════════════════════ */
 let composing=false, guardUntil=0;
 const LOG=[]; let logOn=false, logT=0;
@@ -852,7 +891,7 @@ document.addEventListener("mousedown", e=>{
 });
 
 /* ═══════════════════════════════════════════════════
-   7. 確定処理
+   8. 確定処理
    ═══════════════════════════════════════════════════ */
 function commit(s){
   const before=cursor;
@@ -875,7 +914,7 @@ function commit(s){
 }
 
 /* ═══════════════════════════════════════════════════
-   8. UI
+   9. UI
    ═══════════════════════════════════════════════════ */
 document.querySelectorAll("[data-gap]").forEach(b=>{
   b.addEventListener("click",()=>{
@@ -941,7 +980,7 @@ function start(){
 }
 
 /* ═══════════════════════════════════════════════════
-   9. 青空文庫ローダー
+   10. 青空文庫ローダー
    ═══════════════════════════════════════════════════ */
 const GH="https://raw.githubusercontent.com/aozorabunko/aozorabunko/master/";
 // カードURLは「人物ID / 作品ID」だけ分かれば組み立てられるが、
@@ -1011,7 +1050,7 @@ async function loadCard(person, work, onStatus){
   if(!m) throw new Error("本文ファイルへのリンクが見つかりません");
   say("本文を取得中…");
   const body=await fetchSJIS(`${GH}cards/${person}/${m[1]}`);
-  return { title:title.trim(), author:author.trim(), kana, text:htmlToAozora(body) };
+  return { title:title.trim(), author:author.trim(), kana, text:htmlToAozora(body), person, work };
 }
 
 /* ── 作品選択パネル ── */
@@ -1059,7 +1098,7 @@ $("pkPasteGo").addEventListener("click", ()=>{
 });
 
 /* ═══════════════════════════════════════════════════
-   10. PWA（ホーム画面へのインストール）
+   11. PWA（ホーム画面へのインストール）
    ═══════════════════════════════════════════════════ */
 // file:// で開いたときは Service Worker を登録できない。単一HTMLのまま動く前提を壊さないよう黙って諦める。
 if(navigator.serviceWorker && location.protocol.startsWith("http")){

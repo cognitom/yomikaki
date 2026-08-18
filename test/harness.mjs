@@ -16,7 +16,9 @@ export async function loadCore() {
 export { SAMPLE, parseAozora, setDoc, engineReset, step, reclassify, maybeAnchor,
          esc, autoHTML, renderRange, toHalf, normalizeInput,
          applySkips, NOISE_LINES, AUTO_LINES, AUTO_CHARS,
-         unify, unifyAll, SIMILAR_GROUPS };
+         unify, unifyAll, SIMILAR_GROUPS,
+         hashText, workId, storageKey, storageGet, storageSet, storageRemove,
+         STORAGE_PREFIX, STORAGE_VERSION };
 export const state = {
   get tokens(){return tokens}, get target(){return target},
   get targetKey(){return targetKey},
